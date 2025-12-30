@@ -15,7 +15,17 @@ final class PCC_Shortcodes {
     public static function events_shortcode($atts) {
         $atts = shortcode_atts(array(
             'limit' => 10,
-        ), $atts, 'pcc_events');
+            'max'      => 6,
+            'per_view' => 3,
+        ), $atts);
+
+        // $events = $data->get_events((int)$atts['limit']);
+        $events = array_slice($events, 0, (int)$atts['max']);
+
+        return $this->render_template('events-list.php', [
+            'events' => $events,
+            'atts'   => $atts,
+        ]);
 
         $limit = max(1, intval($atts['limit']));
 

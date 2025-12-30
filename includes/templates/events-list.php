@@ -1,8 +1,11 @@
 <?php
 if (!defined('ABSPATH')) { exit; }
 /** @var array $items */
+/** @var array $atts */
 
+$per_view = isset($atts['per_view']) ? (int)$atts['per_view'] : 3;
 ?>
+
 <div class="pcc pcc-events">
     <ul class="pcc-list">
         <?php foreach ($items as $it) :
