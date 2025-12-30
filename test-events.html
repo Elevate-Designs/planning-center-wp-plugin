@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PCC Events Slider Test</title>
+
+  <style>
+    .pcc-events-slider {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      max-width: 1000px;
+      margin: 40px auto;
+    }
+
+    .pcc-slider-viewport {
+      overflow: hidden;
+      width: 100%;
+    }
+
+    .pcc-slider-track {
+      display: flex;
+      gap: 16px;
+      transition: transform 300ms ease;
+    }
+
+    .pcc-event-card {
+      flex: 0 0 calc((100% - 32px) / 3);
+      background: #f4f6f8;
+      border-radius: 14px;
+      padding: 16px;
+    }
+
+    .pcc-event-card h3 {
+      margin: 0 0 6px;
+      font-size: 16px;
+    }
+
+    .pcc-slider-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-size: 22px;
+      background: #ddd;
+    }
+
+    @media (max-width: 900px) {
+      .pcc-event-card { flex-basis: calc((100% - 16px) / 2); }
+    }
+
+    @media (max-width: 520px) {
+      .pcc-event-card { flex-basis: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="pcc-events-slider" data-per-view="3">
+  <button class="pcc-slider-btn pcc-prev">‹</button>
+
+  <div class="pcc-slider-viewport">
+    <div class="pcc-slider-track">
+
+      <article class="pcc-event-card"><h3>Sunday Service</h3><div>Jan 4, 3:00 PM</div></article>
+      <article class="pcc-event-card"><h3>Prayer Night</h3><div>Jan 5, 5:00 AM</div></article>
+      <article class="pcc-event-card"><h3>Youth Gathering</h3><div>Jan 9, 10:00 PM</div></article>
+      <article class="pcc-event-card"><h3>Bible Study</h3><div>Jan 10, 2:00 PM</div></article>
+      <article class="pcc-event-card"><h3>Leadership Meeting</h3><div>Jan 11, 3:00 PM</div></article>
+      <article class="pcc-event-card"><h3>Worship Practice</h3><div>Jan 12, 5:00 AM</div></article>
+
+    </div>
+  </div>
+
+  <button class="pcc-slider-btn pcc-next">›</button>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".pcc-events-slider").forEach(slider => {
+    const track = slider.querySelector(".pcc-slider-track");
+    const cards = slider.querySelectorAll(".pcc-event-card");
+    const perView = parseInt(slider.dataset.perView || "3", 10);
+    let index = 0;
+
+    function update() {
+      const cardWidth = cards[0].offsetWidth;
+      const gap = 16;
+      const step = (cardWidth + gap) * perView;
+      track.style.transform = `translateX(-${index * step}px)`;
+    }
+
+    slider.querySelector(".pcc-prev").onclick = () => {
+      index = Math.max(index - 1, 0);
+      update();
+    };
+
+    slider.querySelector(".pcc-next").onclick = () => {
+      const maxIndex = Math.max(Math.ceil(cards.length / perView) - 1, 0);
+      index = Math.min(index + 1, maxIndex);
+      update();
+    };
+
+    window.addEventListener("resize", update);
+    update();
+  });
+});
+</script>
+
+</body>
+</html>

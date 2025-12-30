@@ -65,10 +65,30 @@ final class PCC_Plugin {
         add_action(PCC_Cron::HOOK, array('PCC_Cron', 'run'));
     }
 
+    // public function enqueue_assets() {
+    //     wp_register_style('pcc-frontend', PCC_PLUGIN_URL . 'assets/css/frontend.css', array(), PCC_VERSION);
+    //     wp_enqueue_style('pcc-frontend');
+    // }
+
     public function enqueue_assets() {
-        wp_register_style('pcc-frontend', PCC_PLUGIN_URL . 'assets/css/frontend.css', array(), PCC_VERSION);
-        wp_enqueue_style('pcc-frontend');
-    }
+    // CSS
+    wp_enqueue_style(
+        'pcc-frontend',
+        PCC_PLUGIN_URL . 'assets/css/frontend.css',
+        array(),
+        PCC_VERSION
+    );
+
+    // JS - EVENTS SLIDER
+    wp_enqueue_script(
+        'pcc-events-slider',
+        PCC_PLUGIN_URL . 'assets/js/events-slider.js',
+        array(),
+        PCC_VERSION,
+        true // PENTING: load di footer
+    );
+}
+
 
     public function load_textdomain() {
         load_plugin_textdomain('pcc', false, dirname(plugin_basename(PCC_PLUGIN_FILE)) . '/languages');
