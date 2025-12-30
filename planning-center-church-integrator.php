@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Planning Center Church Integrator
  * Description: Pull Events (Calendar), Sermons (Publishing Episodes), and Groups from Planning Center and display them on your WordPress site via shortcodes.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Sagitarisandy
  * Text Domain: pcc
  * Requires at least: 6.0
