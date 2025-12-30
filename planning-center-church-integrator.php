@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Planning Center Church Integrator
  * Description: Pull Events (Calendar), Sermons (Publishing Episodes), and Groups from Planning Center and display them on your WordPress site via shortcodes.
- * Version: 1.0.2
+ * Version: 1.0.3
  * Author: Sagitarisandy
  * Text Domain: pcc
  * Requires at least: 6.0
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * =====================================================
  */
-define( 'PCC_VERSION', '1.0.1' );
+define( 'PCC_VERSION', '1.0.3' );
 define( 'PCC_PLUGIN_FILE', __FILE__ );
 define( 'PCC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PCC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -58,15 +58,17 @@ pcc();
  * GitHub Auto Update (Plugin Update Checker)
  * =====================================================
  */
-require_once PCC_PLUGIN_DIR . 'plugin-update-checker-master/plugin-update-checker.php';
+$updaterPath = PCC_PLUGIN_DIR . 'plugin-update-checker/plugin-update-checker.php';
 
-use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+if ( file_exists( $updaterPath ) ) {
+    require_once $updaterPath;
 
-$updateChecker = PucFactory::buildUpdateChecker(
-    'https://github.com/Elevate-Designs/planning-center-wp-plugin/',
-    PCC_PLUGIN_FILE,
-    'planning-center-church-integrator'
-);
+    $updateChecker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+        'https://github.com/Elevate-Designs/planning-center-wp-plugin/',
+        PCC_PLUGIN_FILE,
+        'planning-center-church-integrator'
+    );
 
-// Gunakan GitHub Releases (recommended)
-$updateChecker->getVcsApi()->enableReleaseAssets();
+    // Gunakan GitHub Releases (recommended)
+    $updateChecker->getVcsApi()->enableReleaseAssets();
+}
