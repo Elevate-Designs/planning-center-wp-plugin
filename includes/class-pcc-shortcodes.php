@@ -47,10 +47,11 @@ final class PCC_Shortcodes {
 
         return self::render_template('events-list.php', [
             'items' => $items,
-            'atts'  => [
-                'per_view' => $per_view,
-                'max'      => $max,
-            ],
+            'atts'  => $atts
+            // 'atts'  => [
+            //     'per_view' => $per_view,
+            //     'max'      => $max,
+            // ],
         ]);
     }
 
