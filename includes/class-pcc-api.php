@@ -8,18 +8,32 @@ final class PCC_API {
 
     public function has_credentials() {
         $settings = get_option(PCC_OPTION_KEY, array());
-        return !empty($settings['app_id']) && !empty($settings['secret_enc']);
+
+        $app_id = trim((string)($settings['app_id'] ?? ''));
+        $secret = $this->get_secret();
+
+        return $app_id !== '' && $secret !== '';
     }
 
     public function get_app_id() {
         $settings = get_option(PCC_OPTION_KEY, array());
-        return isset($settings['app_id']) ? trim((string) $settings['app_id']) : '';
+        return trim((string)($settings['app_id'] ?? ''));
     }
 
     public function get_secret() {
         $settings = get_option(PCC_OPTION_KEY, array());
-        $enc = isset($settings['secret_enc']) ? (string) $settings['secret_enc'] : '';
-        return PCC_Crypto::decrypt($enc);
+
+        // ✅ Preferred (encrypted)
+        if (!empty($settings['secret_enc'])) {
+            return PCC_Crypto::decrypt((string)$settings['secret_enc']);
+        }
+
+        // 🔄 Backward compatibility (plain secret)
+        if (!empty($settings['secret'])) {
+            return trim((string)$settings['secret']);
+        }
+
+        return '';
     }
 
     public function get_auth_header() {
@@ -29,25 +43,21 @@ final class PCC_API {
         if ($app_id === '' || $secret === '') {
             return '';
         }
+
         return 'Basic ' . base64_encode($app_id . ':' . $secret);
     }
 
-    /**
-     * Low-level HTTP request.
-     *
-     * @param string $path_or_url  Example: '/calendar/v2/event_instances' OR a full URL if $absolute = true.
-     * @param array  $params       Query string params.
-     * @param string $method       GET/POST/etc.
-     * @param bool   $absolute     Whether $path_or_url is already a full URL.
-     * @return array|WP_Error
-     */
     public function request($path_or_url, $params = array(), $method = 'GET', $absolute = false) {
-        $auth = $this->get_auth_header();
-        if ($auth === '') {
-            return new WP_Error('pcc_missing_credentials', __('Planning Center credentials are not set yet.', 'pcc'));
+        if (!$this->has_credentials()) {
+            return new WP_Error(
+                'pcc_missing_credentials',
+                __('Planning Center credentials are not set yet.', 'pcc')
+            );
         }
 
-        $url = $absolute ? $path_or_url : (rtrim(PCC_API_BASE, '/') . '/' . ltrim($path_or_url, '/'));
+        $url = $absolute
+            ? $path_or_url
+            : rtrim(PCC_API_BASE, '/') . '/' . ltrim($path_or_url, '/');
 
         if (!empty($params)) {
             $url = add_query_arg($params, $url);
@@ -57,7 +67,7 @@ final class PCC_API {
             'method'  => $method,
             'timeout' => 20,
             'headers' => array(
-                'Authorization' => $auth,
+                'Authorization' => $this->get_auth_header(),
                 'Accept'        => 'application/json',
                 'User-Agent'    => 'WP-PCC/' . PCC_VERSION . ' (' . home_url('/') . ')',
             ),
@@ -73,8 +83,15 @@ final class PCC_API {
         $body   = wp_remote_retrieve_body($response);
 
         if ($status < 200 || $status >= 300) {
-            $message = sprintf(__('Planning Center API request failed (%1$s): %2$s', 'pcc'), $status, $url);
-            return new WP_Error('pcc_api_error', $message, array('status' => $status, 'body' => $body));
+            return new WP_Error(
+                'pcc_api_error',
+                sprintf(
+                    __('Planning Center API request failed (%1$s): %2$s', 'pcc'),
+                    $status,
+                    esc_url_raw($url)
+                ),
+                array('status' => $status, 'body' => $body)
+            );
         }
 
         return array(
@@ -93,68 +110,12 @@ final class PCC_API {
 
         $json = json_decode($res['body'], true);
         if (!is_array($json)) {
-            return new WP_Error('pcc_bad_json', __('Could not decode JSON response from Planning Center.', 'pcc'), array('body' => $res['body']));
+            return new WP_Error(
+                'pcc_bad_json',
+                __('Could not decode JSON response from Planning Center.', 'pcc')
+            );
         }
 
         return $json;
-    }
-
-    /**
-     * Fetch all pages by following JSON:API links.next.
-     * NOTE: We cap pages to avoid runaway loops.
-     *
-     * @return array|WP_Error  A JSON-like array with merged data/included.
-     */
-    public function get_all($path, $params = array(), $max_pages = 10) {
-        $page = 0;
-        $next_url = null;
-
-        $merged = array(
-            'data'     => array(),
-            'included' => array(),
-            'links'    => array(),
-            'meta'     => array(),
-        );
-
-        while (true) {
-            $page++;
-
-            $json = ($next_url === null)
-                ? $this->get_json($path, $params, false)
-                : $this->get_json($next_url, array(), true);
-
-            if (is_wp_error($json)) {
-                return $json;
-            }
-
-            if (isset($json['data']) && is_array($json['data'])) {
-                $merged['data'] = array_merge($merged['data'], $json['data']);
-            }
-
-            if (isset($json['included']) && is_array($json['included'])) {
-                $merged['included'] = array_merge($merged['included'], $json['included']);
-            }
-
-            $merged['links'] = isset($json['links']) && is_array($json['links']) ? $json['links'] : $merged['links'];
-            $merged['meta']  = isset($json['meta']) && is_array($json['meta']) ? $json['meta'] : $merged['meta'];
-
-            $next_url = $this->extract_next_url($json);
-
-            if ($next_url === null || $page >= $max_pages) {
-                break;
-            }
-        }
-
-        return $merged;
-    }
-
-    private function extract_next_url($json) {
-        if (!is_array($json)) {
-            return null;
-        }
-        if (isset($json['links']) && is_array($json['links']) && !empty($json['links']['next'])) {
-            return $json['links']['next'];
-        }
-        return null;
     }
 }
