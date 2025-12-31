@@ -4,93 +4,79 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-final class PCC_Plugin {
-
-    private static $instance = null;
+final class PCC_Data {
 
     /** @var PCC_API */
-    public $api;
+    private $api;
 
-    /** @var PCC_Cache */
-    public $cache;
+    /** @var PCC_Cache|null */
+    private $cache;
 
-    /** @var PCC_Data */
-    public $data;
-
-    private function __construct() {
-        $this->includes();
-
-        $this->cache = class_exists('PCC_Cache') ? new PCC_Cache() : null;
-        $this->api   = class_exists('PCC_API') ? new PCC_API() : null;
-
-        if (class_exists('PCC_Data') && $this->api) {
-            $this->data = new PCC_Data($this->api, $this->cache);
-        } else {
-            $this->data = null;
-        }
-
-        $this->init_hooks();
+    public function __construct(PCC_API $api, $cache = null) {
+        $this->api   = $api;
+        $this->cache = $cache;
     }
 
-    public static function instance() {
-        if (self::$instance === null) {
-            self::$instance = new self();
+    /**
+     * ======================================================
+     * EVENTS (Calendar)
+     * ======================================================
+     */
+    public function get_events($force = false, $limit = 10) {
+
+        // Planning Center Calendar endpoint (BENAR)
+        $path = '/calendar/v2/event_instances';
+
+        $params = [
+            'include' => 'event',
+            'per_page' => min(25, max(1, (int)$limit)),
+        ];
+
+        // optional cache
+        $cache_key = 'events_' . $limit;
+
+        if (!$force && $this->cache && ($cached = $this->cache->get($cache_key))) {
+            return $cached;
         }
-        return self::$instance;
+
+        $json = $this->api->get_all($path, $params, 5);
+
+        if (!is_wp_error($json) && $this->cache) {
+            $this->cache->set($cache_key, $json, 300); // 5 min
+        }
+
+        return $json;
     }
 
-    private function includes() {
-        // Core dependencies (pastikan file-file ini memang ada)
-        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-crypto.php';
-        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-cache.php';
-        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-api.php';
-        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-data.php';
-        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-shortcodes.php';
-        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-cron.php';
+    /**
+     * ======================================================
+     * SERMONS (Publishing)
+     * ======================================================
+     */
+    public function get_sermons($force = false, $limit = 10) {
 
-        if (is_admin()) {
-            $admin_file = PCC_PLUGIN_DIR . 'includes/admin/class-pcc-admin.php';
-            if (file_exists($admin_file)) {
-                require_once $admin_file;
-            }
-        }
+        $path = '/publishing/v2/episodes';
+
+        $params = [
+            'per_page' => min(25, max(1, (int)$limit)),
+        ];
+
+        return $this->api->get_all($path, $params, 3);
     }
 
-    private function init_hooks() {
-        // shortcodes
-        add_action('init', array('PCC_Shortcodes', 'register'));
+    /**
+     * ======================================================
+     * GROUPS
+     * ======================================================
+     */
+    public function get_groups($force = false, $limit = 20) {
 
-        // frontend assets
-        add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
+        $path = '/groups/v2/groups';
 
-        // cron
-        add_action('init', array('PCC_Cron', 'register_schedules'));
-        add_action(PCC_Cron::HOOK, array('PCC_Cron', 'run'));
+        $params = [
+            'per_page' => min(25, max(1, (int)$limit)),
+        ];
 
-        // admin
-        if (is_admin() && class_exists('PCC_Admin')) {
-            add_action('admin_menu', array('PCC_Admin', 'register_menu'));
-            add_action('admin_init', array('PCC_Admin', 'register_settings'));
-        }
-    }
-
-    public function enqueue_assets() {
-        wp_enqueue_style(
-            'pcc-frontend',
-            PCC_PLUGIN_URL . 'assets/css/frontend.css',
-            array(),
-            PCC_VERSION
-        );
-
-        $slider_js_path = PCC_PLUGIN_DIR . 'assets/js/events-slider.js';
-        if (file_exists($slider_js_path)) {
-            wp_enqueue_script(
-                'pcc-events-slider',
-                PCC_PLUGIN_URL . 'assets/js/events-slider.js',
-                array(),
-                PCC_VERSION,
-                true
-            );
-        }
+        return $this->api->get_all($path, $params, 3);
     }
 }
