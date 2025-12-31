@@ -1,5 +1,4 @@
 <?php
-
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -12,27 +11,41 @@ final class PCC_API {
     }
 
     public function get_app_id() {
-        $settings = $this->get_settings();
-        return isset($settings['app_id']) ? trim((string) $settings['app_id']) : '';
+        $s = $this->get_settings();
+
+        // PAT standard key
+        if (!empty($s['app_id'])) return trim((string)$s['app_id']);
+
+        // compatibility: kalau sebelumnya keburu pakai key OAuth UI
+        if (!empty($s['oauth_client_id'])) return trim((string)$s['oauth_client_id']);
+        if (!empty($s['client_id'])) return trim((string)$s['client_id']);
+
+        return '';
     }
 
     public function get_secret() {
-        $settings = $this->get_settings();
+        $s = $this->get_settings();
 
-        // Preferred encrypted
-        if (!empty($settings['secret_enc'])) {
-            $enc = (string) $settings['secret_enc'];
-            $dec = PCC_Crypto::decrypt($enc);
+        // PAT encrypted
+        if (!empty($s['secret_enc'])) {
+            $dec = class_exists('PCC_Crypto') ? PCC_Crypto::decrypt((string)$s['secret_enc']) : '';
             $dec = is_string($dec) ? trim($dec) : '';
-            if ($dec !== '') {
-                return $dec;
-            }
+            if ($dec !== '') return $dec;
         }
 
-        // Backward compatible (plain)
-        if (!empty($settings['secret'])) {
-            return trim((string) $settings['secret']);
+        // PAT plain fallback (legacy)
+        if (!empty($s['secret'])) {
+            return trim((string)$s['secret']);
         }
+
+        // compatibility: OAuth keys pernah dipakai untuk nyimpen “secret”
+        if (!empty($s['oauth_client_secret_enc'])) {
+            $dec = class_exists('PCC_Crypto') ? PCC_Crypto::decrypt((string)$s['oauth_client_secret_enc']) : '';
+            $dec = is_string($dec) ? trim($dec) : '';
+            if ($dec !== '') return $dec;
+        }
+        if (!empty($s['oauth_client_secret'])) return trim((string)$s['oauth_client_secret']);
+        if (!empty($s['client_secret'])) return trim((string)$s['client_secret']);
 
         return '';
     }
@@ -44,12 +57,7 @@ final class PCC_API {
     public function get_auth_header() {
         $app_id = $this->get_app_id();
         $secret = $this->get_secret();
-
-        if ($app_id === '' || $secret === '') {
-            return '';
-        }
-
-        // PAT: Basic base64(PAT_ID:PAT_SECRET)
+        if ($app_id === '' || $secret === '') return '';
         return 'Basic ' . base64_encode($app_id . ':' . $secret);
     }
 
@@ -60,7 +68,6 @@ final class PCC_API {
         }
 
         $url = $absolute ? $path_or_url : (rtrim(PCC_API_BASE, '/') . '/' . ltrim($path_or_url, '/'));
-
         if (!empty($params)) {
             $url = add_query_arg($params, $url);
         }
@@ -85,14 +92,19 @@ final class PCC_API {
         $body   = (string) wp_remote_retrieve_body($response);
 
         if ($status < 200 || $status >= 300) {
-            $msg = sprintf(__('Planning Center API request failed (%1$s): %2$s', 'pcc'), $status, $url);
-
-            // Biar jelas kalau 401
+            $hint = '';
             if ($status === 401) {
-                $msg .= ' — Unauthorized (cek Personal Access Token ID/Secret).';
+                $hint = ' (401 Unauthorized) - Pastikan yang dipakai adalah Personal Access Token (Application ID & Secret), bukan OAuth Client ID/Secret.';
             }
 
-            return new WP_Error('pcc_api_error', $msg, array('status' => $status, 'body' => $body));
+            $message = sprintf(
+                __('Planning Center API request failed (%1$s): %2$s%3$s', 'pcc'),
+                $status,
+                $url,
+                $hint
+            );
+
+            return new WP_Error('pcc_api_error', $message, array('status' => $status, 'body' => $body));
         }
 
         return array(
@@ -105,15 +117,12 @@ final class PCC_API {
 
     public function get_json($path_or_url, $params = array(), $absolute = false) {
         $res = $this->request($path_or_url, $params, 'GET', $absolute);
-        if (is_wp_error($res)) {
-            return $res;
-        }
+        if (is_wp_error($res)) return $res;
 
         $json = json_decode($res['body'], true);
         if (!is_array($json)) {
             return new WP_Error('pcc_bad_json', __('Could not decode JSON response from Planning Center.', 'pcc'), array('body' => $res['body']));
         }
-
         return $json;
     }
 
@@ -135,38 +144,23 @@ final class PCC_API {
                 ? $this->get_json($path, $params, false)
                 : $this->get_json($next_url, array(), true);
 
-            if (is_wp_error($json)) {
-                return $json;
-            }
+            if (is_wp_error($json)) return $json;
 
-            if (isset($json['data']) && is_array($json['data'])) {
+            if (!empty($json['data']) && is_array($json['data'])) {
                 $merged['data'] = array_merge($merged['data'], $json['data']);
             }
-
-            if (isset($json['included']) && is_array($json['included'])) {
+            if (!empty($json['included']) && is_array($json['included'])) {
                 $merged['included'] = array_merge($merged['included'], $json['included']);
             }
 
-            $merged['links'] = isset($json['links']) && is_array($json['links']) ? $json['links'] : $merged['links'];
-            $merged['meta']  = isset($json['meta']) && is_array($json['meta']) ? $json['meta'] : $merged['meta'];
+            if (!empty($json['links']) && is_array($json['links'])) $merged['links'] = $json['links'];
+            if (!empty($json['meta']) && is_array($json['meta']))   $merged['meta']  = $json['meta'];
 
-            $next_url = $this->extract_next_url($json);
+            $next_url = (!empty($json['links']['next']) ? $json['links']['next'] : null);
 
-            if ($next_url === null || $page >= $max_pages) {
-                break;
-            }
+            if ($next_url === null || $page >= $max_pages) break;
         }
 
         return $merged;
-    }
-
-    private function extract_next_url($json) {
-        if (!is_array($json)) {
-            return null;
-        }
-        if (isset($json['links']) && is_array($json['links']) && !empty($json['links']['next'])) {
-            return $json['links']['next'];
-        }
-        return null;
     }
 }

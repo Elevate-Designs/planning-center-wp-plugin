@@ -1,99 +1,74 @@
 <?php
-if (!defined('ABSPATH')) { exit; }
+/**
+ * Plugin Name: Planning Center Church Integrator
+ * Description: Pull Events (Calendar), Sermons (Publishing Episodes), and Groups from Planning Center and display them on your WordPress site via shortcodes.
+ * Version: 1.0.10
+ * Author: Sagitarisandy
+ * Text Domain: pcc
+ * Requires at least: 6.0
+ * Requires PHP: 7.4
+ */
 
-final class PCC_Plugin {
+if (!defined('ABSPATH')) {
+    exit;
+}
 
-    private static $instance = null;
+/**
+ * Constants
+ */
+define('PCC_VERSION', '1.0.10');
+define('PCC_PLUGIN_FILE', __FILE__);
+define('PCC_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('PCC_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('PCC_OPTION_KEY', 'pcc_settings');
+define('PCC_CACHE_GROUP', 'pcc');
+define('PCC_API_BASE', 'https://api.planningcenteronline.com');
 
-    /** @var PCC_API */
-    public $api;
+/**
+ * Includes (safe)
+ */
+$includes = PCC_PLUGIN_DIR . 'includes/';
 
-    /** @var PCC_Cache */
-    public $cache;
+if (file_exists($includes . 'class-pcc-cron.php')) {
+    require_once $includes . 'class-pcc-cron.php';
+}
+if (file_exists($includes . 'class-pcc-plugin.php')) {
+    require_once $includes . 'class-pcc-plugin.php';
+}
 
-    /** @var PCC_Data */
-    public $data;
+/**
+ * Activation / Deactivation
+ */
+if (class_exists('PCC_Cron')) {
+    register_activation_hook(PCC_PLUGIN_FILE, array('PCC_Cron', 'activate'));
+    register_deactivation_hook(PCC_PLUGIN_FILE, array('PCC_Cron', 'deactivate'));
+}
 
-    private function __construct() {
-        $this->includes();
-        $this->init_services();
-        $this->init_hooks();
-    }
+/**
+ * Bootstrap helper
+ */
+function pcc() {
+    return class_exists('PCC_Plugin') ? PCC_Plugin::instance() : null;
+}
 
-    public static function instance() {
-        if (self::$instance === null) {
-            self::$instance = new self();
-        }
-        return self::$instance;
-    }
+// init after all plugins loaded (safer)
+add_action('plugins_loaded', function () {
+    pcc();
+});
 
-    private function includes() {
-        $base = PCC_PLUGIN_DIR . 'includes/';
+/**
+ * GitHub Auto Update (optional)
+ */
+$updaterPath = PCC_PLUGIN_DIR . 'plugin-update-checker/plugin-update-checker.php';
+if (file_exists($updaterPath)) {
+    require_once $updaterPath;
 
-        // Core helpers
-        if (file_exists($base . 'class-pcc-crypto.php')) require_once $base . 'class-pcc-crypto.php';
-        if (file_exists($base . 'class-pcc-cache.php'))  require_once $base . 'class-pcc-cache.php';
-
-        // API + Data
-        if (file_exists($base . 'class-pcc-api.php'))    require_once $base . 'class-pcc-api.php';
-        if (file_exists($base . 'class-pcc-data.php'))   require_once $base . 'class-pcc-data.php';
-
-        // Cron + Shortcodes
-        if (file_exists($base . 'class-pcc-cron.php'))       require_once $base . 'class-pcc-cron.php';
-        if (file_exists($base . 'class-pcc-shortcodes.php')) require_once $base . 'class-pcc-shortcodes.php';
-
-        // Admin
-        if (is_admin()) {
-            $admin = $base . 'admin/class-pcc-admin.php';
-            if (file_exists($admin)) require_once $admin;
-        }
-    }
-
-    private function init_services() {
-        $this->cache = class_exists('PCC_Cache') ? new PCC_Cache() : null;
-        $this->api   = class_exists('PCC_API') ? new PCC_API() : null;
-
-        // IMPORTANT: PCC_Data butuh 2 argumen ($api, $cache)
-        if (class_exists('PCC_Data') && $this->api) {
-            $this->data = new PCC_Data($this->api, $this->cache);
-        } else {
-            $this->data = null;
-        }
-    }
-
-    private function init_hooks() {
-        // Shortcodes
-        add_action('init', array('PCC_Shortcodes', 'register'));
-
-        // Assets
-        add_action('wp_enqueue_scripts', array($this, 'register_assets'));
-
-        // Admin
-        if (is_admin() && class_exists('PCC_Admin')) {
-            add_action('admin_menu', array('PCC_Admin', 'register_menu'));
-            add_action('admin_init', array('PCC_Admin', 'register_settings'));
-            add_action('admin_post_pcc_refresh_cache', array('PCC_Admin', 'handle_refresh_cache'));
-        }
-
-        // Cron
-        if (class_exists('PCC_Cron')) {
-            add_action('init', array('PCC_Cron', 'register_schedules'));
-            add_action(PCC_Cron::HOOK, array('PCC_Cron', 'run'));
-        }
-    }
-
-    public function register_assets() {
-        // CSS
-        $css_path = PCC_PLUGIN_DIR . 'assets/css/frontend.css';
-        if (file_exists($css_path)) {
-            wp_register_style('pcc-frontend', PCC_PLUGIN_URL . 'assets/css/frontend.css', array(), PCC_VERSION);
-            wp_enqueue_style('pcc-frontend');
-        }
-
-        // JS Slider
-        $js_path = PCC_PLUGIN_DIR . 'assets/js/events-slider.js';
-        if (file_exists($js_path)) {
-            wp_register_script('pcc-events-slider', PCC_PLUGIN_URL . 'assets/js/events-slider.js', array(), PCC_VERSION, true);
-        }
+    if (class_exists('\YahnisElsts\PluginUpdateChecker\v5\PucFactory')) {
+        $updateChecker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+            'https://github.com/Elevate-Designs/planning-center-wp-plugin/',
+            PCC_PLUGIN_FILE,
+            'planning-center-church-integrator'
+        );
+        $updateChecker->getVcsApi()->enableReleaseAssets();
     }
 }
