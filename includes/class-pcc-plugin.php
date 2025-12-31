@@ -4,179 +4,93 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-final class PCC_API {
+final class PCC_Plugin {
 
-    private function get_settings() {
-        $key = defined('PCC_OPTION_KEY') ? PCC_OPTION_KEY : 'pcc_settings';
-        $settings = get_option($key, array());
-        return is_array($settings) ? $settings : array();
-    }
+    private static $instance = null;
 
-    public function has_credentials() {
-        $app_id = $this->get_app_id();
-        $secret = $this->get_secret();
-        return ($app_id !== '' && $secret !== '');
-    }
+    /** @var PCC_API */
+    public $api;
 
-    public function get_app_id() {
-        $settings = $this->get_settings();
-        return isset($settings['app_id']) ? trim((string)$settings['app_id']) : '';
-    }
+    /** @var PCC_Cache */
+    public $cache;
 
-    public function get_secret() {
-        $settings = $this->get_settings();
+    /** @var PCC_Data */
+    public $data;
 
-        // Preferred encrypted
-        if (!empty($settings['secret_enc'])) {
-            $enc = (string)$settings['secret_enc'];
-            $dec = PCC_Crypto::decrypt($enc);
-            return is_string($dec) ? trim($dec) : '';
+    private function __construct() {
+        $this->includes();
+
+        $this->cache = class_exists('PCC_Cache') ? new PCC_Cache() : null;
+        $this->api   = class_exists('PCC_API') ? new PCC_API() : null;
+
+        if (class_exists('PCC_Data') && $this->api) {
+            $this->data = new PCC_Data($this->api, $this->cache);
+        } else {
+            $this->data = null;
         }
 
-        // Backward compatible plain secret
-        if (!empty($settings['secret'])) {
-            return trim((string)$settings['secret']);
-        }
-
-        return '';
+        $this->init_hooks();
     }
 
-    public function get_auth_header() {
-        $app_id = $this->get_app_id();
-        $secret = $this->get_secret();
-
-        if ($app_id === '' || $secret === '') {
-            return '';
+    public static function instance() {
+        if (self::$instance === null) {
+            self::$instance = new self();
         }
-        return 'Basic ' . base64_encode($app_id . ':' . $secret);
+        return self::$instance;
     }
 
-    /**
-     * Low-level HTTP request.
-     *
-     * @param string $path_or_url Example: '/calendar/v2/events' OR a full URL if $absolute = true.
-     * @param array  $params      Query params.
-     * @param string $method      GET/POST/etc.
-     * @param bool   $absolute    If true, $path_or_url is a full URL.
-     * @return array|\WP_Error
-     */
-    public function request($path_or_url, $params = array(), $method = 'GET', $absolute = false) {
-        $auth = $this->get_auth_header();
-        if ($auth === '') {
-            return new \WP_Error('pcc_missing_credentials', __('Planning Center credentials are not set yet.', 'pcc'));
+    private function includes() {
+        // Core dependencies (pastikan file-file ini memang ada)
+        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-crypto.php';
+        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-cache.php';
+        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-api.php';
+        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-data.php';
+        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-shortcodes.php';
+        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-cron.php';
+
+        if (is_admin()) {
+            $admin_file = PCC_PLUGIN_DIR . 'includes/admin/class-pcc-admin.php';
+            if (file_exists($admin_file)) {
+                require_once $admin_file;
+            }
         }
+    }
 
-        $base = defined('PCC_API_BASE') ? PCC_API_BASE : 'https://api.planningcenteronline.com';
-        $url  = $absolute ? $path_or_url : (rtrim($base, '/') . '/' . ltrim($path_or_url, '/'));
+    private function init_hooks() {
+        // shortcodes
+        add_action('init', array('PCC_Shortcodes', 'register'));
 
-        if (!empty($params)) {
-            $url = add_query_arg($params, $url);
+        // frontend assets
+        add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
+
+        // cron
+        add_action('init', array('PCC_Cron', 'register_schedules'));
+        add_action(PCC_Cron::HOOK, array('PCC_Cron', 'run'));
+
+        // admin
+        if (is_admin() && class_exists('PCC_Admin')) {
+            add_action('admin_menu', array('PCC_Admin', 'register_menu'));
+            add_action('admin_init', array('PCC_Admin', 'register_settings'));
         }
+    }
 
-        $args = array(
-            'method'  => $method,
-            'timeout' => 20,
-            'headers' => array(
-                'Authorization' => $auth,
-                'Accept'        => 'application/json',
-                'User-Agent'    => 'WP-PCC/' . (defined('PCC_VERSION') ? PCC_VERSION : 'dev') . ' (' . home_url('/') . ')',
-            ),
+    public function enqueue_assets() {
+        wp_enqueue_style(
+            'pcc-frontend',
+            PCC_PLUGIN_URL . 'assets/css/frontend.css',
+            array(),
+            PCC_VERSION
         );
 
-        $response = wp_remote_request($url, $args);
-
-        if (is_wp_error($response)) {
-            return $response;
+        $slider_js_path = PCC_PLUGIN_DIR . 'assets/js/events-slider.js';
+        if (file_exists($slider_js_path)) {
+            wp_enqueue_script(
+                'pcc-events-slider',
+                PCC_PLUGIN_URL . 'assets/js/events-slider.js',
+                array(),
+                PCC_VERSION,
+                true
+            );
         }
-
-        $status = (int) wp_remote_retrieve_response_code($response);
-        $body   = (string) wp_remote_retrieve_body($response);
-
-        if ($status < 200 || $status >= 300) {
-            $message = sprintf(__('Planning Center API request failed (%1$s): %2$s', 'pcc'), $status, $url);
-            return new \WP_Error('pcc_api_error', $message, array('status' => $status, 'body' => $body));
-        }
-
-        return array(
-            'status'  => $status,
-            'body'    => $body,
-            'headers' => wp_remote_retrieve_headers($response),
-            'url'     => $url,
-        );
-    }
-
-    /**
-     * @return array|\WP_Error
-     */
-    public function get_json($path_or_url, $params = array(), $absolute = false) {
-        $res = $this->request($path_or_url, $params, 'GET', $absolute);
-        if (is_wp_error($res)) {
-            return $res;
-        }
-
-        $json = json_decode($res['body'], true);
-        if (!is_array($json)) {
-            return new \WP_Error('pcc_bad_json', __('Could not decode JSON response from Planning Center.', 'pcc'), array('body' => $res['body']));
-        }
-
-        return $json;
-    }
-
-    /**
-     * Fetch all pages by following JSON:API links.next.
-     *
-     * @return array|\WP_Error
-     */
-    public function get_all($path, $params = array(), $max_pages = 10) {
-        $page = 0;
-        $next_url = null;
-
-        $merged = array(
-            'data'     => array(),
-            'included' => array(),
-            'links'    => array(),
-            'meta'     => array(),
-        );
-
-        while (true) {
-            $page++;
-
-            $json = ($next_url === null)
-                ? $this->get_json($path, $params, false)
-                : $this->get_json($next_url, array(), true);
-
-            if (is_wp_error($json)) {
-                return $json;
-            }
-
-            if (isset($json['data']) && is_array($json['data'])) {
-                $merged['data'] = array_merge($merged['data'], $json['data']);
-            }
-
-            if (isset($json['included']) && is_array($json['included'])) {
-                $merged['included'] = array_merge($merged['included'], $json['included']);
-            }
-
-            $merged['links'] = (isset($json['links']) && is_array($json['links'])) ? $json['links'] : $merged['links'];
-            $merged['meta']  = (isset($json['meta']) && is_array($json['meta'])) ? $json['meta'] : $merged['meta'];
-
-            $next_url = $this->extract_next_url($json);
-
-            if ($next_url === null || $page >= $max_pages) {
-                break;
-            }
-        }
-
-        return $merged;
-    }
-
-    private function extract_next_url($json) {
-        if (!is_array($json)) {
-            return null;
-        }
-        if (isset($json['links']) && is_array($json['links']) && !empty($json['links']['next'])) {
-            return $json['links']['next'];
-        }
-        return null;
     }
 }

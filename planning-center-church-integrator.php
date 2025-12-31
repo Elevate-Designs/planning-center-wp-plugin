@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Planning Center Church Integrator
  * Description: Pull Events (Calendar), Sermons (Publishing Episodes), and Groups from Planning Center and display them on your WordPress site via shortcodes.
- * Version: 1.0.10
+ * Version: 1.0.11
  * Author: Sagitarisandy
  * Text Domain: pcc
  * Requires at least: 6.0
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * =====================================================
  */
-define( 'PCC_VERSION', '1.0.10' );
+define( 'PCC_VERSION', '1.0.11' );
 define( 'PCC_PLUGIN_FILE', __FILE__ );
 define( 'PCC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PCC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -32,14 +32,9 @@ define( 'PCC_API_BASE', 'https://api.planningcenteronline.com' );
  * =====================================================
  */
 require_once PCC_PLUGIN_DIR . 'includes/class-pcc-plugin.php';
-require_once PCC_PLUGIN_DIR . 'includes/class-pcc-cron.php';
-require_once PCC_PLUGIN_DIR . 'includes/class-pcc-shortcodes.php';
+require_once PCC_PLUGIN_DIR . 'includes/class-pcc-cron.php';       // needed for activation hook
+require_once PCC_PLUGIN_DIR . 'includes/class-pcc-shortcodes.php'; // safe (require_once)
 
-/**
- * =====================================================
- * Activation / Deactivation
- * =====================================================
- */
 register_activation_hook( PCC_PLUGIN_FILE, array( 'PCC_Cron', 'activate' ) );
 register_deactivation_hook( PCC_PLUGIN_FILE, array( 'PCC_Cron', 'deactivate' ) );
 
@@ -69,6 +64,5 @@ if ( file_exists( $updaterPath ) ) {
         'planning-center-church-integrator'
     );
 
-    // Gunakan GitHub Releases (recommended)
     $updateChecker->getVcsApi()->enableReleaseAssets();
 }

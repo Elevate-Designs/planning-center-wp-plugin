@@ -28,12 +28,15 @@ final class PCC_Shortcodes {
         $per_view = max(1, (int) $atts['per_view']);
 
         $plugin = function_exists('pcc') ? pcc() : null;
-        if (!$plugin || !$plugin->api->has_credentials()) {
-            return '<div class="pcc-error">Planning Center credentials are not set.</div>';
+
+        // builder/admin: jangan bikin fatal / jangan bikin merah
+        if (!$plugin || !isset($plugin->api) || !$plugin->api->has_credentials() || !isset($plugin->data)) {
+            return '<div class="pcc-empty">Events will appear here.</div>';
         }
 
         $json = $plugin->data->get_events(false, $limit);
         if (is_wp_error($json)) {
+            // di frontend tampil error, di builder tetap aman
             return self::render_error($json);
         }
 
@@ -43,15 +46,16 @@ final class PCC_Shortcodes {
             return '<div class="pcc-empty">Events will appear here.</div>';
         }
 
+        // apply max
         $items = array_slice($items, 0, $max);
 
         return self::render_template('events-list.php', [
             'items' => $items,
-            'atts'  => $atts
-            // 'atts'  => [
-            //     'per_view' => $per_view,
-            //     'max'      => $max,
-            // ],
+            'atts'  => [
+                'limit'    => $limit,
+                'max'      => $max,
+                'per_view' => $per_view,
+            ],
         ]);
     }
 
@@ -59,7 +63,6 @@ final class PCC_Shortcodes {
      * SERMONS
      * ====================================================== */
     public static function sermons_shortcode($atts) {
-
         $atts = shortcode_atts([
             'limit' => 10,
         ], $atts, 'pcc_sermons');
@@ -67,8 +70,8 @@ final class PCC_Shortcodes {
         $limit = max(1, (int) $atts['limit']);
 
         $plugin = function_exists('pcc') ? pcc() : null;
-        if (!$plugin || !$plugin->api->has_credentials()) {
-            return '<div class="pcc-error">Planning Center credentials are not set.</div>';
+        if (!$plugin || !isset($plugin->api) || !$plugin->api->has_credentials() || !isset($plugin->data)) {
+            return '<div class="pcc-empty">Sermons will appear here.</div>';
         }
 
         $json = $plugin->data->get_sermons(false, $limit);
@@ -87,7 +90,6 @@ final class PCC_Shortcodes {
      * GROUPS
      * ====================================================== */
     public static function groups_shortcode($atts) {
-
         $atts = shortcode_atts([
             'limit' => 20,
         ], $atts, 'pcc_groups');
@@ -95,8 +97,8 @@ final class PCC_Shortcodes {
         $limit = max(1, (int) $atts['limit']);
 
         $plugin = function_exists('pcc') ? pcc() : null;
-        if (!$plugin || !$plugin->api->has_credentials()) {
-            return '<div class="pcc-error">Planning Center credentials are not set.</div>';
+        if (!$plugin || !isset($plugin->api) || !$plugin->api->has_credentials() || !isset($plugin->data)) {
+            return '<div class="pcc-empty">Groups will appear here.</div>';
         }
 
         $json = $plugin->data->get_groups(false, $limit);
@@ -161,7 +163,7 @@ final class PCC_Shortcodes {
             $attrs = $node['attributes'] ?? [];
 
             $items[] = [
-                'id'    => $node['id'] ?? '',
+                'id'    => (string)($node['id'] ?? ''),
                 'title' => self::guess_title($attrs),
                 'url'   => self::guess_url($attrs),
                 'date'  => self::guess_date($attrs),
@@ -171,6 +173,10 @@ final class PCC_Shortcodes {
         return $items;
     }
 
+    /**
+     * IMPORTANT:
+     * Calendar event_instances biasanya title/url ada di "included" event.
+     */
     private static function normalize_event_instances($json) {
         $items = [];
 
@@ -178,15 +184,48 @@ final class PCC_Shortcodes {
             return $items;
         }
 
+        // Map included
+        $included_map = [];
+        if (!empty($json['included']) && is_array($json['included'])) {
+            foreach ($json['included'] as $inc) {
+                if (isset($inc['type'], $inc['id'])) {
+                    $included_map[$inc['type'] . '/' . $inc['id']] = $inc;
+                }
+            }
+        }
+
         foreach ($json['data'] as $node) {
             $attrs = $node['attributes'] ?? [];
 
+            $title = '';
+            $url   = '';
+
+            // relationship event -> included
+            if (isset($node['relationships']['event']['data']['type'], $node['relationships']['event']['data']['id'])) {
+                $rel = $node['relationships']['event']['data'];
+                $key = $rel['type'] . '/' . $rel['id'];
+
+                if (isset($included_map[$key]['attributes']) && is_array($included_map[$key]['attributes'])) {
+                    $eattrs = $included_map[$key]['attributes'];
+
+                    $title = self::guess_title($eattrs);
+
+                    // url priority
+                    foreach (['public_url', 'church_center_url', 'public_church_center_url', 'url'] as $k) {
+                        if (!empty($eattrs[$k]) && is_string($eattrs[$k])) {
+                            $url = $eattrs[$k];
+                            break;
+                        }
+                    }
+                }
+            }
+
             $items[] = [
-                'id'        => $node['id'] ?? '',
-                'title'     => $attrs['summary'] ?? '',
-                'url'       => $attrs['public_url'] ?? '',
-                'starts_at' => $attrs['starts_at'] ?? '',
-                'ends_at'   => $attrs['ends_at'] ?? '',
+                'id'        => (string)($node['id'] ?? ''),
+                'title'     => $title ?: 'Event',
+                'url'       => $url,
+                'starts_at' => (string)($attrs['starts_at'] ?? ''),
+                'ends_at'   => (string)($attrs['ends_at'] ?? ''),
             ];
         }
 
@@ -194,14 +233,29 @@ final class PCC_Shortcodes {
     }
 
     private static function guess_title($attrs) {
-        return $attrs['title'] ?? $attrs['name'] ?? '';
+        foreach (['title', 'name', 'summary'] as $k) {
+            if (!empty($attrs[$k]) && is_string($attrs[$k])) {
+                return $attrs[$k];
+            }
+        }
+        return '';
     }
 
     private static function guess_url($attrs) {
-        return $attrs['public_url'] ?? $attrs['url'] ?? '';
+        foreach (['public_url', 'url', 'church_center_url', 'public_church_center_url'] as $k) {
+            if (!empty($attrs[$k]) && is_string($attrs[$k])) {
+                return $attrs[$k];
+            }
+        }
+        return '';
     }
 
     private static function guess_date($attrs) {
-        return $attrs['published_at'] ?? $attrs['starts_at'] ?? '';
+        foreach (['published_at', 'starts_at', 'created_at', 'updated_at'] as $k) {
+            if (!empty($attrs[$k]) && is_string($attrs[$k])) {
+                return $attrs[$k];
+            }
+        }
+        return '';
     }
 }
