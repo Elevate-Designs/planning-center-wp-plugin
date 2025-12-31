@@ -1,166 +1,152 @@
 <?php
-if (!defined('ABSPATH')) {
-    exit;
-}
+if (!defined('ABSPATH')) { exit; }
 
-final class PCC_API {
+final class PCC_Admin {
 
-    private function get_settings() {
-        $settings = get_option(PCC_OPTION_KEY, array());
-        return is_array($settings) ? $settings : array();
-    }
+    const PAGE_SLUG = 'pcc-settings';
+    const GROUP     = 'pcc_settings_group';
 
-    public function get_app_id() {
-        $s = $this->get_settings();
-
-        // PAT standard key
-        if (!empty($s['app_id'])) return trim((string)$s['app_id']);
-
-        // compatibility: kalau sebelumnya keburu pakai key OAuth UI
-        if (!empty($s['oauth_client_id'])) return trim((string)$s['oauth_client_id']);
-        if (!empty($s['client_id'])) return trim((string)$s['client_id']);
-
-        return '';
-    }
-
-    public function get_secret() {
-        $s = $this->get_settings();
-
-        // PAT encrypted
-        if (!empty($s['secret_enc'])) {
-            $dec = class_exists('PCC_Crypto') ? PCC_Crypto::decrypt((string)$s['secret_enc']) : '';
-            $dec = is_string($dec) ? trim($dec) : '';
-            if ($dec !== '') return $dec;
-        }
-
-        // PAT plain fallback (legacy)
-        if (!empty($s['secret'])) {
-            return trim((string)$s['secret']);
-        }
-
-        // compatibility: OAuth keys pernah dipakai untuk nyimpen “secret”
-        if (!empty($s['oauth_client_secret_enc'])) {
-            $dec = class_exists('PCC_Crypto') ? PCC_Crypto::decrypt((string)$s['oauth_client_secret_enc']) : '';
-            $dec = is_string($dec) ? trim($dec) : '';
-            if ($dec !== '') return $dec;
-        }
-        if (!empty($s['oauth_client_secret'])) return trim((string)$s['oauth_client_secret']);
-        if (!empty($s['client_secret'])) return trim((string)$s['client_secret']);
-
-        return '';
-    }
-
-    public function has_credentials() {
-        return ($this->get_app_id() !== '' && $this->get_secret() !== '');
-    }
-
-    public function get_auth_header() {
-        $app_id = $this->get_app_id();
-        $secret = $this->get_secret();
-        if ($app_id === '' || $secret === '') return '';
-        return 'Basic ' . base64_encode($app_id . ':' . $secret);
-    }
-
-    public function request($path_or_url, $params = array(), $method = 'GET', $absolute = false) {
-        $auth = $this->get_auth_header();
-        if ($auth === '') {
-            return new WP_Error('pcc_missing_credentials', __('Planning Center credentials are not set yet.', 'pcc'));
-        }
-
-        $url = $absolute ? $path_or_url : (rtrim(PCC_API_BASE, '/') . '/' . ltrim($path_or_url, '/'));
-        if (!empty($params)) {
-            $url = add_query_arg($params, $url);
-        }
-
-        $args = array(
-            'method'  => $method,
-            'timeout' => 20,
-            'headers' => array(
-                'Authorization' => $auth,
-                'Accept'        => 'application/json',
-                'User-Agent'    => 'WP-PCC/' . PCC_VERSION . ' (' . home_url('/') . ')',
-            ),
-        );
-
-        $response = wp_remote_request($url, $args);
-
-        if (is_wp_error($response)) {
-            return $response;
-        }
-
-        $status = (int) wp_remote_retrieve_response_code($response);
-        $body   = (string) wp_remote_retrieve_body($response);
-
-        if ($status < 200 || $status >= 300) {
-            $hint = '';
-            if ($status === 401) {
-                $hint = ' (401 Unauthorized) - Pastikan yang dipakai adalah Personal Access Token (Application ID & Secret), bukan OAuth Client ID/Secret.';
-            }
-
-            $message = sprintf(
-                __('Planning Center API request failed (%1$s): %2$s%3$s', 'pcc'),
-                $status,
-                $url,
-                $hint
-            );
-
-            return new WP_Error('pcc_api_error', $message, array('status' => $status, 'body' => $body));
-        }
-
-        return array(
-            'status'  => $status,
-            'body'    => $body,
-            'headers' => wp_remote_retrieve_headers($response),
-            'url'     => $url,
+    public static function register_menu() {
+        add_options_page(
+            'Planning Center Integration (PAT)',
+            'Planning Center',
+            'manage_options',
+            self::PAGE_SLUG,
+            array(__CLASS__, 'render_page')
         );
     }
 
-    public function get_json($path_or_url, $params = array(), $absolute = false) {
-        $res = $this->request($path_or_url, $params, 'GET', $absolute);
-        if (is_wp_error($res)) return $res;
+    public static function register_settings() {
+        register_setting(self::GROUP, PCC_OPTION_KEY, array(__CLASS__, 'sanitize_settings'));
 
-        $json = json_decode($res['body'], true);
-        if (!is_array($json)) {
-            return new WP_Error('pcc_bad_json', __('Could not decode JSON response from Planning Center.', 'pcc'), array('body' => $res['body']));
-        }
-        return $json;
-    }
-
-    public function get_all($path, $params = array(), $max_pages = 10) {
-        $page = 0;
-        $next_url = null;
-
-        $merged = array(
-            'data'     => array(),
-            'included' => array(),
-            'links'    => array(),
-            'meta'     => array(),
+        add_settings_section(
+            'pcc_section_main',
+            'Personal Access Token (PAT)',
+            array(__CLASS__, 'section_main_desc'),
+            self::PAGE_SLUG
         );
 
-        while (true) {
-            $page++;
+        add_settings_field(
+            'pcc_app_id',
+            'Application ID',
+            array(__CLASS__, 'field_app_id'),
+            self::PAGE_SLUG,
+            'pcc_section_main'
+        );
 
-            $json = ($next_url === null)
-                ? $this->get_json($path, $params, false)
-                : $this->get_json($next_url, array(), true);
+        add_settings_field(
+            'pcc_secret',
+            'Secret',
+            array(__CLASS__, 'field_secret'),
+            self::PAGE_SLUG,
+            'pcc_section_main'
+        );
+    }
 
-            if (is_wp_error($json)) return $json;
+    private static function get_settings() {
+        $s = get_option(PCC_OPTION_KEY, array());
+        return is_array($s) ? $s : array();
+    }
 
-            if (!empty($json['data']) && is_array($json['data'])) {
-                $merged['data'] = array_merge($merged['data'], $json['data']);
-            }
-            if (!empty($json['included']) && is_array($json['included'])) {
-                $merged['included'] = array_merge($merged['included'], $json['included']);
-            }
+    public static function section_main_desc() {
+        echo '<p>Masukkan <strong>Application ID</strong> dan <strong>Secret</strong> dari Planning Center (Personal Access Token). Ini bukan OAuth.</p>';
+    }
 
-            if (!empty($json['links']) && is_array($json['links'])) $merged['links'] = $json['links'];
-            if (!empty($json['meta']) && is_array($json['meta']))   $merged['meta']  = $json['meta'];
+    public static function field_app_id() {
+        $s = self::get_settings();
+        $val = '';
 
-            $next_url = (!empty($json['links']['next']) ? $json['links']['next'] : null);
+        // prefer PAT key
+        if (!empty($s['app_id'])) $val = (string)$s['app_id'];
 
-            if ($next_url === null || $page >= $max_pages) break;
+        // compatibility: kalau dulu keburu pakai oauth keys
+        if ($val === '' && !empty($s['oauth_client_id'])) $val = (string)$s['oauth_client_id'];
+
+        echo '<input type="text" name="' . esc_attr(PCC_OPTION_KEY) . '[app_id]" value="' . esc_attr($val) . '" class="regular-text" />';
+        echo '<p class="description">Contoh: 123456 atau string dari Planning Center PAT</p>';
+    }
+
+    public static function field_secret() {
+        echo '<input type="password" name="' . esc_attr(PCC_OPTION_KEY) . '[secret]" value="" class="regular-text" autocomplete="new-password" />';
+        echo '<p class="description">Kosongkan jika tidak ingin mengubah secret yang sudah tersimpan.</p>';
+    }
+
+    public static function sanitize_settings($input) {
+        $old = self::get_settings();
+        $out = $old;
+
+        if (!is_array($input)) $input = array();
+
+        // app_id
+        $app_id = isset($input['app_id']) ? trim((string)$input['app_id']) : '';
+        if ($app_id !== '') {
+            $out['app_id'] = $app_id;
         }
 
-        return $merged;
+        // secret (only update if user typed)
+        $secret = isset($input['secret']) ? trim((string)$input['secret']) : '';
+        if ($secret !== '') {
+            if (class_exists('PCC_Crypto')) {
+                $out['secret_enc'] = PCC_Crypto::encrypt($secret);
+                unset($out['secret']); // remove plain if exists
+            } else {
+                // fallback if no crypto file exists
+                $out['secret'] = $secret;
+                unset($out['secret_enc']);
+            }
+        }
+
+        // cleanup oauth keys so UI doesn't confuse
+        unset($out['oauth_client_id'], $out['oauth_client_secret'], $out['oauth_client_secret_enc'], $out['client_id'], $out['client_secret']);
+
+        return $out;
+    }
+
+    public static function render_page() {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        echo '<div class="wrap">';
+        echo '<h1>Planning Center Integration (PAT)</h1>';
+
+        echo '<form method="post" action="options.php">';
+        settings_fields(self::GROUP);
+        do_settings_sections(self::PAGE_SLUG);
+        submit_button('Save Settings');
+        echo '</form>';
+
+        echo '<hr />';
+        self::render_connection_test();
+
+        echo '</div>';
+    }
+
+    private static function render_connection_test() {
+        echo '<h2>Connection Test</h2>';
+
+        $plugin = function_exists('pcc') ? pcc() : null;
+        if (!$plugin || empty($plugin->api) || !method_exists($plugin->api, 'has_credentials')) {
+            echo '<div class="notice notice-error"><p>Plugin API belum siap.</p></div>';
+            return;
+        }
+
+        if (!$plugin->api->has_credentials()) {
+            echo '<div class="notice notice-warning"><p>Planning Center credentials are not set yet.</p></div>';
+            return;
+        }
+
+        // Test simple call
+        $res = $plugin->api->get_json('/calendar/v2/event_instances', array(
+            'per_page' => 1,
+            'include'  => 'event',
+        ));
+
+        if (is_wp_error($res)) {
+            echo '<div class="notice notice-error"><p>' . esc_html($res->get_error_message()) . '</p></div>';
+            return;
+        }
+
+        echo '<div class="notice notice-success"><p>✅ Connected! API request successful.</p></div>';
     }
 }
