@@ -30,15 +30,17 @@ final class PCC_Plugin {
     private function includes() {
         $base = PCC_PLUGIN_DIR . 'includes/';
 
-        // Core deps
+        // Core helpers
         if (file_exists($base . 'class-pcc-crypto.php')) require_once $base . 'class-pcc-crypto.php';
         if (file_exists($base . 'class-pcc-cache.php'))  require_once $base . 'class-pcc-cache.php';
+
+        // API + Data
         if (file_exists($base . 'class-pcc-api.php'))    require_once $base . 'class-pcc-api.php';
         if (file_exists($base . 'class-pcc-data.php'))   require_once $base . 'class-pcc-data.php';
 
-        // Features
-        if (file_exists($base . 'class-pcc-shortcodes.php')) require_once $base . 'class-pcc-shortcodes.php';
+        // Cron + Shortcodes
         if (file_exists($base . 'class-pcc-cron.php'))       require_once $base . 'class-pcc-cron.php';
+        if (file_exists($base . 'class-pcc-shortcodes.php')) require_once $base . 'class-pcc-shortcodes.php';
 
         // Admin
         if (is_admin()) {
@@ -48,20 +50,11 @@ final class PCC_Plugin {
     }
 
     private function init_services() {
-        // Cache
-        if (class_exists('PCC_Cache')) {
-            $this->cache = new PCC_Cache();
-        } else {
-            // minimal fallback to prevent fatal if cache file missing
-            $this->cache = null;
-        }
+        $this->cache = class_exists('PCC_Cache') ? new PCC_Cache() : null;
+        $this->api   = class_exists('PCC_API') ? new PCC_API() : null;
 
-        // API
-        $this->api = class_exists('PCC_API') ? new PCC_API() : null;
-
-        // Data (IMPORTANT: expects 2 args in your setup)
-        if (class_exists('PCC_Data')) {
-            // If PCC_Data has strict type hints, cache must be object; assume file exists in your plugin.
+        // IMPORTANT: PCC_Data butuh 2 argumen ($api, $cache)
+        if (class_exists('PCC_Data') && $this->api) {
             $this->data = new PCC_Data($this->api, $this->cache);
         } else {
             $this->data = null;
@@ -70,46 +63,37 @@ final class PCC_Plugin {
 
     private function init_hooks() {
         // Shortcodes
-        add_action('init', function () {
-            if (class_exists('PCC_Shortcodes')) {
-                PCC_Shortcodes::register();
-            }
-        });
+        add_action('init', array('PCC_Shortcodes', 'register'));
 
         // Assets
-        add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
+        add_action('wp_enqueue_scripts', array($this, 'register_assets'));
 
         // Admin
         if (is_admin() && class_exists('PCC_Admin')) {
             add_action('admin_menu', array('PCC_Admin', 'register_menu'));
             add_action('admin_init', array('PCC_Admin', 'register_settings'));
-
-            // OAuth handlers
-            add_action('admin_post_pcc_oauth_start', array('PCC_Admin', 'oauth_start'));
-            add_action('admin_post_pcc_oauth_callback', array('PCC_Admin', 'oauth_callback'));
-            add_action('admin_post_pcc_oauth_disconnect', array('PCC_Admin', 'oauth_disconnect'));
+            add_action('admin_post_pcc_refresh_cache', array('PCC_Admin', 'handle_refresh_cache'));
         }
 
-        // Cron (optional)
+        // Cron
         if (class_exists('PCC_Cron')) {
             add_action('init', array('PCC_Cron', 'register_schedules'));
-            if (defined('PCC_Cron::HOOK')) {
-                add_action(PCC_Cron::HOOK, array('PCC_Cron', 'run'));
-            }
+            add_action(PCC_Cron::HOOK, array('PCC_Cron', 'run'));
         }
     }
 
-    public function enqueue_assets() {
+    public function register_assets() {
         // CSS
-        $css_file = PCC_PLUGIN_DIR . 'assets/css/frontend.css';
-        if (file_exists($css_file)) {
-            wp_enqueue_style('pcc-frontend', PCC_PLUGIN_URL . 'assets/css/frontend.css', array(), PCC_VERSION);
+        $css_path = PCC_PLUGIN_DIR . 'assets/css/frontend.css';
+        if (file_exists($css_path)) {
+            wp_register_style('pcc-frontend', PCC_PLUGIN_URL . 'assets/css/frontend.css', array(), PCC_VERSION);
+            wp_enqueue_style('pcc-frontend');
         }
 
-        // JS slider
-        $js_file = PCC_PLUGIN_DIR . 'assets/js/events-slider.js';
-        if (file_exists($js_file)) {
-            wp_enqueue_script('pcc-events-slider', PCC_PLUGIN_URL . 'assets/js/events-slider.js', array(), PCC_VERSION, true);
+        // JS Slider
+        $js_path = PCC_PLUGIN_DIR . 'assets/js/events-slider.js';
+        if (file_exists($js_path)) {
+            wp_register_script('pcc-events-slider', PCC_PLUGIN_URL . 'assets/js/events-slider.js', array(), PCC_VERSION, true);
         }
     }
 }
