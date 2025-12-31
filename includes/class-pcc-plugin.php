@@ -1,74 +1,45 @@
 <?php
-if (!defined('ABSPATH')) { exit; }
+if (!defined('ABSPATH')) exit;
 
-final class PCC_Data {
+final class PCC_Plugin {
 
-    private $api;
-    private $cache;
+    private static $instance = null;
 
-    public function __construct($api, $cache = null) {
-        $this->api   = $api;
-        $this->cache = $cache;
+    /** @var PCC_API */
+    public $api;
+
+    /** @var PCC_Data */
+    public $data;
+
+    private function __construct() {
+        $this->includes();
+        $this->init();
     }
 
-    /* ======================================================
-     * EVENTS (Calendar)
-     * ====================================================== */
-    public function get_events($force = false, $limit = 10) {
-        $limit = max(1, (int)$limit);
+    public static function instance() {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
 
-        $path = '/calendar/v2/event_instances';
-        $params = array(
-            'include'  => 'event',
-            'per_page' => min(25, $limit),
-        );
+    private function includes() {
+        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-api.php';
+        require_once PCC_PLUGIN_DIR . 'includes/class-pcc-shortcodes.php';
 
-        $cache_key = 'pcc_events_' . $limit;
+        // OPTIONAL: kalau ada
+        if (file_exists(PCC_PLUGIN_DIR . 'includes/class-pcc-data.php')) {
+            require_once PCC_PLUGIN_DIR . 'includes/class-pcc-data.php';
+        }
+    }
 
-        // ✅ Cache read (only if available)
-        if (!$force && $this->cache && method_exists($this->cache, 'get')) {
-            $cached = $this->cache->get($cache_key);
-            if (!empty($cached)) {
-                return $cached;
-            }
+    private function init() {
+        $this->api = new PCC_API();
+
+        if (class_exists('PCC_Data')) {
+            $this->data = new PCC_Data($this->api);
         }
 
-        // Fetch from API (paged)
-        $json = $this->api->get_all($path, $params, 5);
-
-        // ✅ Cache write (only if available)
-        if (!is_wp_error($json) && $this->cache && method_exists($this->cache, 'set')) {
-            $this->cache->set($cache_key, $json, 300); // 5 min
-        }
-
-        return $json;
-    }
-
-    /* ======================================================
-     * SERMONS (Publishing Episodes)
-     * ====================================================== */
-    public function get_sermons($force = false, $limit = 10) {
-        $limit = max(1, (int)$limit);
-
-        $path = '/publishing/v2/episodes';
-        $params = array(
-            'per_page' => min(25, $limit),
-        );
-
-        return $this->api->get_all($path, $params, 3);
-    }
-
-    /* ======================================================
-     * GROUPS
-     * ====================================================== */
-    public function get_groups($force = false, $limit = 20) {
-        $limit = max(1, (int)$limit);
-
-        $path = '/groups/v2/groups';
-        $params = array(
-            'per_page' => min(25, $limit),
-        );
-
-        return $this->api->get_all($path, $params, 3);
+        add_action('init', ['PCC_Shortcodes', 'register']);
     }
 }
