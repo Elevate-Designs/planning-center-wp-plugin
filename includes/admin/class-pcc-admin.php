@@ -1,229 +1,195 @@
 <?php
-
-if (!defined('ABSPATH')) {
-    exit;
-}
+if (!defined('ABSPATH')) { exit; }
 
 final class PCC_Admin {
 
-    const CAPABILITY = 'manage_options';
-
     public static function register_menu() {
         add_options_page(
-            __('Planning Center', 'pcc'),
-            __('Planning Center', 'pcc'),
-            self::CAPABILITY,
+            'Planning Center Integration',
+            'Planning Center',
+            'manage_options',
             'pcc-settings',
-            array(__CLASS__, 'render_settings_page')
+            array(__CLASS__, 'render_page')
         );
     }
 
     public static function register_settings() {
-        register_setting('pcc_settings_group', PCC_OPTION_KEY, array(__CLASS__, 'sanitize_settings'));
-
-        add_settings_section(
-            'pcc_section_main',
-            __('API Settings', 'pcc'),
-            array(__CLASS__, 'render_section_main'),
-            'pcc-settings'
-        );
-
-        add_settings_field(
-            'pcc_app_id',
-            __('Application ID', 'pcc'),
-            array(__CLASS__, 'render_field_app_id'),
-            'pcc-settings',
-            'pcc_section_main'
-        );
-
-        add_settings_field(
-            'pcc_secret',
-            __('Secret', 'pcc'),
-            array(__CLASS__, 'render_field_secret'),
-            'pcc-settings',
-            'pcc_section_main'
-        );
-
-        add_settings_section(
-            'pcc_section_cache',
-            __('Cache & Sync', 'pcc'),
-            array(__CLASS__, 'render_section_cache'),
-            'pcc-settings'
-        );
-
-        add_settings_field(
-            'pcc_cache_ttl',
-            __('Cache TTL (seconds)', 'pcc'),
-            array(__CLASS__, 'render_field_cache_ttl'),
-            'pcc-settings',
-            'pcc_section_cache'
-        );
-
-        add_settings_field(
-            'pcc_cron_enabled',
-            __('Warm cache automatically (WP-Cron)', 'pcc'),
-            array(__CLASS__, 'render_field_cron_enabled'),
-            'pcc-settings',
-            'pcc_section_cache'
-        );
-
-        add_settings_field(
-            'pcc_cron_recurrence',
-            __('Cron schedule', 'pcc'),
-            array(__CLASS__, 'render_field_cron_recurrence'),
-            'pcc-settings',
-            'pcc_section_cache'
-        );
-
-        // Admin actions.
-        add_action('admin_post_pcc_test_connection', array(__CLASS__, 'handle_test_connection'));
-        add_action('admin_post_pcc_clear_cache', array(__CLASS__, 'handle_clear_cache'));
-        add_action('admin_post_pcc_warm_cache', array(__CLASS__, 'handle_warm_cache'));
+        register_setting('pcc_settings_group', PCC_OPTION_KEY, array(
+            'type'              => 'array',
+            'sanitize_callback' => array(__CLASS__, 'sanitize_settings'),
+            'default'           => array(),
+        ));
     }
 
     public static function sanitize_settings($input) {
-        $existing = get_option(PCC_OPTION_KEY, array());
-        $out = is_array($existing) ? $existing : array();
+        $old = get_option(PCC_OPTION_KEY, array());
+        if (!is_array($old)) $old = array();
+        if (!is_array($input)) $input = array();
 
-        $out['app_id'] = isset($input['app_id']) ? sanitize_text_field($input['app_id']) : '';
+        $out = $old;
 
-        // Only overwrite secret if user typed something.
-        if (isset($input['secret']) && trim((string) $input['secret']) !== '') {
-            $out['secret_enc'] = PCC_Crypto::encrypt(sanitize_text_field($input['secret']));
-        } elseif (!isset($out['secret_enc'])) {
-            $out['secret_enc'] = '';
+        $out['oauth_client_id'] = trim((string)($input['oauth_client_id'] ?? $old['oauth_client_id'] ?? ''));
+
+        // client secret: if empty, keep old
+        $secret_plain = trim((string)($input['oauth_client_secret'] ?? ''));
+        if ($secret_plain !== '') {
+            if (class_exists('PCC_Crypto') && method_exists('PCC_Crypto', 'encrypt')) {
+                $out['oauth_client_secret_enc'] = (string) PCC_Crypto::encrypt($secret_plain);
+            } else {
+                // fallback (not ideal)
+                $out['oauth_client_secret_enc'] = $secret_plain;
+            }
         }
-
-        $out['cache_ttl'] = isset($input['cache_ttl']) ? max(60, intval($input['cache_ttl'])) : 900;
-
-        $out['cron_enabled'] = !empty($input['cron_enabled']) ? true : false;
-
-        $allowed = array('pcc_15m', 'hourly', 'twicedaily', 'daily');
-        $rec = isset($input['cron_recurrence']) ? (string) $input['cron_recurrence'] : 'hourly';
-        $out['cron_recurrence'] = in_array($rec, $allowed, true) ? $rec : 'hourly';
 
         return $out;
     }
 
-    public static function render_settings_page() {
-        if (!current_user_can(self::CAPABILITY)) {
-            return;
-        }
-
-        $settings = get_option(PCC_OPTION_KEY, array());
-        $has_secret = !empty($settings['secret_enc']);
-
-        include PCC_PLUGIN_DIR . 'includes/admin/views/settings-page.php';
+    public static function redirect_uri() {
+        return admin_url('admin-post.php?action=pcc_oauth_callback');
     }
 
-    public static function render_section_main() {
-        echo '<p>' . esc_html__('Use a Planning Center Personal Access Token (Application ID + Secret).', 'pcc') . '</p>';
-    }
-
-    public static function render_section_cache() {
-        echo '<p>' . esc_html__('We cache API responses in WordPress transients. WP-Cron can warm the cache in the background.', 'pcc') . '</p>';
-    }
-
-    public static function render_field_app_id() {
-        $settings = get_option(PCC_OPTION_KEY, array());
-        $val = isset($settings['app_id']) ? $settings['app_id'] : '';
-        echo '<input type="text" name="' . esc_attr(PCC_OPTION_KEY) . '[app_id]" value="' . esc_attr($val) . '" class="regular-text" />'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-    }
-
-    public static function render_field_secret() {
-        // never prefill.
-        echo '<input type="password" name="' . esc_attr(PCC_OPTION_KEY) . '[secret]" value="" class="regular-text" autocomplete="new-password" />';
-        echo '<p class="description">' . esc_html__('Leave blank to keep the existing secret.', 'pcc') . '</p>';
-    }
-
-    public static function render_field_cache_ttl() {
-        $settings = get_option(PCC_OPTION_KEY, array());
-        $val = isset($settings['cache_ttl']) ? intval($settings['cache_ttl']) : 900;
-        echo '<input type="number" min="60" step="1" name="' . esc_attr(PCC_OPTION_KEY) . '[cache_ttl]" value="' . esc_attr($val) . '" />'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-    }
-
-    public static function render_field_cron_enabled() {
-        $settings = get_option(PCC_OPTION_KEY, array());
-        $enabled = isset($settings['cron_enabled']) ? (bool) $settings['cron_enabled'] : true;
-        echo '<label><input type="checkbox" name="' . esc_attr(PCC_OPTION_KEY) . '[cron_enabled]" value="1" ' . checked(true, $enabled, false) . ' /> ' . esc_html__('Enable automatic cache warmup', 'pcc') . '</label>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-    }
-
-    public static function render_field_cron_recurrence() {
-        $settings = get_option(PCC_OPTION_KEY, array());
-        $rec = isset($settings['cron_recurrence']) ? (string) $settings['cron_recurrence'] : 'hourly';
-        $options = array(
-            'pcc_15m'     => __('Every 15 minutes', 'pcc'),
-            'hourly'      => __('Hourly', 'pcc'),
-            'twicedaily'  => __('Twice daily', 'pcc'),
-            'daily'       => __('Daily', 'pcc'),
-        );
-
-        echo '<select name="' . esc_attr(PCC_OPTION_KEY) . '[cron_recurrence]">'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-        foreach ($options as $k => $label) {
-            echo '<option value="' . esc_attr($k) . '" ' . selected($rec, $k, false) . '>' . esc_html($label) . '</option>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-        }
-        echo '</select>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-    }
-
-    public static function handle_test_connection() {
-        if (!current_user_can(self::CAPABILITY)) {
-            wp_die(__('Not allowed.', 'pcc'));
-        }
-        check_admin_referer('pcc_test_connection');
+    public static function oauth_start() {
+        if (!current_user_can('manage_options')) wp_die('Forbidden');
+        check_admin_referer('pcc_oauth_start');
 
         $plugin = function_exists('pcc') ? pcc() : null;
-        if (!$plugin) {
-            wp_die(__('Plugin not initialized.', 'pcc'));
+        if (!$plugin || !$plugin->api) wp_die('Plugin not ready');
+
+        if (!$plugin->api->has_oauth_client()) {
+            wp_redirect(add_query_arg(array('page'=>'pcc-settings','pcc_msg'=>'missing_client'), admin_url('options-general.php')));
+            exit;
         }
 
-        $results = array();
-
-        $endpoints = array(
-            'calendar'   => '/calendar/v2/events',
-            'groups'     => '/groups/v2/groups',
-            'publishing' => '/publishing/v2/episodes',
-        );
-
-        foreach ($endpoints as $key => $path) {
-            $json = $plugin->api->get_json($path, array('per_page' => 1), false);
-            $results[$key] = is_wp_error($json) ? $json->get_error_message() : 'OK';
-        }
-
-        set_transient('pcc_admin_test_results', $results, 60);
-
-        wp_safe_redirect(add_query_arg(array('page' => 'pcc-settings', 'pcc_notice' => 'tested'), admin_url('options-general.php')));
+        $authorize_url = $plugin->api->get_authorize_url(self::redirect_uri(), 'calendar groups publishing');
+        wp_redirect($authorize_url);
         exit;
     }
 
-    public static function handle_clear_cache() {
-        if (!current_user_can(self::CAPABILITY)) {
-            wp_die(__('Not allowed.', 'pcc'));
+    public static function oauth_callback() {
+        if (!current_user_can('manage_options')) wp_die('Forbidden');
+
+        $code = isset($_GET['code']) ? sanitize_text_field(wp_unslash($_GET['code'])) : '';
+        if ($code === '') {
+            wp_redirect(add_query_arg(array('page'=>'pcc-settings','pcc_msg'=>'no_code'), admin_url('options-general.php')));
+            exit;
         }
-        check_admin_referer('pcc_clear_cache');
 
         $plugin = function_exists('pcc') ? pcc() : null;
-        if ($plugin) {
-            $plugin->cache->clear_all();
+        if (!$plugin || !$plugin->api) wp_die('Plugin not ready');
+
+        $ok = $plugin->api->exchange_code_for_token($code, self::redirect_uri());
+        if (is_wp_error($ok)) {
+            wp_redirect(add_query_arg(array(
+                'page'=>'pcc-settings',
+                'pcc_msg'=>'oauth_failed',
+                'pcc_err'=> rawurlencode($ok->get_error_message()),
+            ), admin_url('options-general.php')));
+            exit;
         }
 
-        wp_safe_redirect(add_query_arg(array('page' => 'pcc-settings', 'pcc_notice' => 'cache_cleared'), admin_url('options-general.php')));
+        wp_redirect(add_query_arg(array('page'=>'pcc-settings','pcc_msg'=>'connected'), admin_url('options-general.php')));
         exit;
     }
 
-    public static function handle_warm_cache() {
-        if (!current_user_can(self::CAPABILITY)) {
-            wp_die(__('Not allowed.', 'pcc'));
-        }
-        check_admin_referer('pcc_warm_cache');
+    public static function oauth_disconnect() {
+        if (!current_user_can('manage_options')) wp_die('Forbidden');
+        check_admin_referer('pcc_oauth_disconnect');
 
         $plugin = function_exists('pcc') ? pcc() : null;
-        if ($plugin) {
-            $plugin->data->get_events(true);
-            $plugin->data->get_sermons(true);
-            $plugin->data->get_groups(true);
+        if ($plugin && $plugin->api) {
+            $plugin->api->disconnect();
         }
 
-        wp_safe_redirect(add_query_arg(array('page' => 'pcc-settings', 'pcc_notice' => 'cache_warmed'), admin_url('options-general.php')));
+        wp_redirect(add_query_arg(array('page'=>'pcc-settings','pcc_msg'=>'disconnected'), admin_url('options-general.php')));
         exit;
+    }
+
+    public static function render_page() {
+        if (!current_user_can('manage_options')) return;
+
+        $plugin = function_exists('pcc') ? pcc() : null;
+        $api = $plugin ? $plugin->api : null;
+
+        $settings = get_option(PCC_OPTION_KEY, array());
+        if (!is_array($settings)) $settings = array();
+
+        $client_id = esc_attr((string)($settings['oauth_client_id'] ?? ''));
+
+        $msg = isset($_GET['pcc_msg']) ? sanitize_text_field(wp_unslash($_GET['pcc_msg'])) : '';
+        $err = isset($_GET['pcc_err']) ? sanitize_text_field(wp_unslash($_GET['pcc_err'])) : '';
+
+        ?>
+        <div class="wrap">
+            <h1>Planning Center Integration (OAuth)</h1>
+
+            <?php if ($msg): ?>
+                <div class="notice notice-info">
+                    <p>
+                        <?php
+                        if ($msg === 'connected') echo '✅ Connected successfully.';
+                        elseif ($msg === 'disconnected') echo '✅ Disconnected.';
+                        elseif ($msg === 'missing_client') echo '⚠️ Please set Client ID & Client Secret first.';
+                        elseif ($msg === 'no_code') echo '⚠️ OAuth callback missing code.';
+                        elseif ($msg === 'oauth_failed') echo '❌ OAuth failed: ' . esc_html($err);
+                        else echo esc_html($msg);
+                        ?>
+                    </p>
+                </div>
+            <?php endif; ?>
+
+            <form method="post" action="options.php">
+                <?php
+                settings_fields('pcc_settings_group');
+                ?>
+
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row"><label>OAuth Client ID</label></th>
+                        <td>
+                            <input type="text" name="<?php echo esc_attr(PCC_OPTION_KEY); ?>[oauth_client_id]" value="<?php echo $client_id; ?>" class="regular-text" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label>OAuth Client Secret</label></th>
+                        <td>
+                            <input type="password" name="<?php echo esc_attr(PCC_OPTION_KEY); ?>[oauth_client_secret]" value="" class="regular-text" autocomplete="new-password" />
+                            <p class="description">Leave blank to keep existing secret.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Redirect URI</th>
+                        <td>
+                            <code><?php echo esc_html(self::redirect_uri()); ?></code>
+                            <p class="description">Masukkan ini ke OAuth App settings di Planning Center.</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <?php submit_button('Save Settings'); ?>
+            </form>
+
+            <hr />
+
+            <h2>Connection</h2>
+
+            <?php if ($api && $api->is_connected()): ?>
+                <p>✅ Status: <strong>Connected</strong></p>
+                <p>Token expires at: <code><?php echo esc_html($api->get_expires_at()); ?></code></p>
+
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php?action=pcc_oauth_disconnect')); ?>">
+                    <?php wp_nonce_field('pcc_oauth_disconnect'); ?>
+                    <?php submit_button('Disconnect', 'secondary'); ?>
+                </form>
+            <?php else: ?>
+                <p>❌ Status: <strong>Not connected</strong></p>
+
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php?action=pcc_oauth_start')); ?>">
+                    <?php wp_nonce_field('pcc_oauth_start'); ?>
+                    <?php submit_button('Connect to Planning Center', 'primary'); ?>
+                </form>
+            <?php endif; ?>
+
+        </div>
+        <?php
     }
 }
