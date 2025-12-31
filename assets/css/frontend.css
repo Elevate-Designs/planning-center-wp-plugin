@@ -1,0 +1,125 @@
+/* PCC Frontend Styles (Events Slider) */
+.pcc { box-sizing: border-box; }
+.pcc * { box-sizing: border-box; }
+
+.pcc-events-slider {
+  position: relative;
+  width: 100%;
+  --pcc-per-view: 3;
+  --pcc-gap: 18px;
+}
+
+.pcc-slider-viewport {
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  padding: 6px 0;
+}
+
+/* Hide scrollbar (still scrollable) */
+.pcc-slider-viewport::-webkit-scrollbar { height: 8px; }
+.pcc-slider-viewport::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 10px; }
+.pcc-slider-viewport { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,.20) transparent; }
+
+.pcc-slider-track {
+  display: flex;
+  gap: var(--pcc-gap);
+  padding: 0 6px;
+}
+
+.pcc-slide {
+  scroll-snap-align: start;
+  flex: 0 0 calc((100% - (var(--pcc-gap) * (var(--pcc-per-view) - 1))) / var(--pcc-per-view));
+  min-width: 240px; /* prevents super tiny cards */
+}
+
+.pcc-event-card {
+  height: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(0,0,0,.08);
+}
+
+.pcc-event-card a {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+}
+
+.pcc-event-thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: rgba(0,0,0,.04);
+  position: relative;
+}
+
+.pcc-event-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pcc-event-body {
+  padding: 14px 14px 16px;
+}
+
+.pcc-event-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.pcc-event-meta {
+  font-size: 14px;
+  opacity: .75;
+  margin: 0 0 10px;
+}
+
+.pcc-event-desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  opacity: .9;
+}
+
+/* Buttons */
+.pcc-slider-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 10px 30px rgba(0,0,0,.12);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  line-height: 1;
+  user-select: none;
+}
+
+.pcc-slider-btn:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.pcc-prev { left: 6px; }
+.pcc-next { right: 6px; }
+
+@media (max-width: 980px) {
+  .pcc-events-slider { --pcc-per-view: 2; }
+  .pcc-slider-btn { width: 40px; height: 40px; font-size: 24px; }
+}
+
+@media (max-width: 640px) {
+  .pcc-events-slider { --pcc-per-view: 1; }
+  .pcc-slide { min-width: 0; }
+  .pcc-prev { left: 2px; }
+  .pcc-next { right: 2px; }
+}
