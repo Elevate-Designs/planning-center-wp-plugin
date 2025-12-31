@@ -4,39 +4,67 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+if (!class_exists('PCC_Cache')):
+
 final class PCC_Cache {
 
-    const KEY_EVENTS  = 'pcc_events';
-    const KEY_SERMONS = 'pcc_sermons';
-    const KEY_GROUPS  = 'pcc_groups';
-
-    public function get_ttl_seconds() {
-        $settings = get_option(PCC_OPTION_KEY, array());
-        $ttl = isset($settings['cache_ttl']) ? intval($settings['cache_ttl']) : 900;
-        if ($ttl < 60) {
-            $ttl = 60;
-        }
-        return $ttl;
+    /**
+     * Prefix all keys to avoid collisions.
+     */
+    private function prefix($key) {
+        return 'pcc_' . ltrim((string)$key, '_');
     }
 
     public function get($key) {
-        return get_transient($key);
+        $key = $this->prefix($key);
+
+        // Prefer object cache if available, otherwise fall back to transients.
+        if (function_exists('wp_cache_get')) {
+            $val = wp_cache_get($key, defined('PCC_CACHE_GROUP') ? PCC_CACHE_GROUP : 'pcc');
+            if ($val !== false) {
+                return $val;
+            }
+        }
+
+        $val = get_transient($key);
+        return ($val === false) ? null : $val;
     }
 
-    public function set($key, $value, $ttl = null) {
-        if ($ttl === null) {
-            $ttl = $this->get_ttl_seconds();
+    public function set($key, $value, $ttl = 600) {
+        $key = $this->prefix($key);
+        $ttl = max(1, (int)$ttl);
+
+        if (function_exists('wp_cache_set')) {
+            wp_cache_set($key, $value, defined('PCC_CACHE_GROUP') ? PCC_CACHE_GROUP : 'pcc', $ttl);
         }
+
         set_transient($key, $value, $ttl);
     }
 
-    public function delete($key) {
-        delete_transient($key);
+    /**
+     * Clear all PCC transients.
+     */
+    public function clear_all() {
+        global $wpdb;
+
+        $prefix = $wpdb->esc_like('_transient_pcc_') . '%';
+        $prefix_timeout = $wpdb->esc_like('_transient_timeout_pcc_') . '%';
+
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+                $prefix,
+                $prefix_timeout
+            )
+        );
     }
 
-    public function clear_all() {
-        $this->delete(self::KEY_EVENTS);
-        $this->delete(self::KEY_SERMONS);
-        $this->delete(self::KEY_GROUPS);
+    /**
+     * Backward-compat alias (some code used flush_all()).
+     */
+    public function flush_all() {
+        $this->clear_all();
     }
 }
+
+endif;
