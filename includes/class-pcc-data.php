@@ -1,91 +1,45 @@
 <?php
-
-if (!defined('ABSPATH')) {
-    exit;
-}
+if (!defined('ABSPATH')) { exit; }
 
 final class PCC_Data {
 
     /** @var PCC_API */
     private $api;
 
-    /** @var PCC_Cache */
+    /** @var PCC_Cache|null */
     private $cache;
 
-    public function __construct($api, $cache) {
+    /**
+     * ✅ cache dibuat OPTIONAL agar tidak fatal kalau dipanggil 1 arg dari file lain
+     */
+    public function __construct(PCC_API $api, $cache = null) {
         $this->api   = $api;
         $this->cache = $cache;
     }
 
-    /**
-     * Upcoming event instances (Calendar).
-     * Endpoint: /calendar/v2/event_instances (commonly used with filter=future).
-     */
-    public function get_events($force_refresh = false, $limit = 25) {
-        $cached = $this->cache->get(PCC_Cache::KEY_EVENTS);
-        if (!$force_refresh && is_array($cached)) {
-            return $cached;
-        }
+    public function get_events($use_cache = true, $limit = 10) {
+        $limit = max(1, (int)$limit);
 
-        $params = array(
-            'filter'   => 'future',
-            'per_page' => intval($limit),
-            // Planning Center uses JSON:API includes; if you get no included data, remove this line.
+        // event_instances lebih cocok untuk starts_at/ends_at
+        return $this->api->get_json('/calendar/v2/event_instances', array(
+            'per_page' => $limit,
             'include'  => 'event',
-        );
-
-        $json = $this->api->get_all('/calendar/v2/event_instances', $params, 5);
-        if (is_wp_error($json)) {
-            return $json;
-        }
-
-        $this->cache->set(PCC_Cache::KEY_EVENTS, $json);
-        return $json;
+        ));
     }
 
-    /**
-     * Sermons (Publishing Episodes).
-     * Endpoint: /publishing/v2/episodes
-     */
-    public function get_sermons($force_refresh = false, $limit = 20) {
-        $cached = $this->cache->get(PCC_Cache::KEY_SERMONS);
-        if (!$force_refresh && is_array($cached)) {
-            return $cached;
-        }
+    public function get_sermons($use_cache = true, $limit = 10) {
+        $limit = max(1, (int)$limit);
 
-        $params = array(
-            'per_page' => intval($limit),
-        );
-
-        $json = $this->api->get_all('/publishing/v2/episodes', $params, 5);
-        if (is_wp_error($json)) {
-            return $json;
-        }
-
-        $this->cache->set(PCC_Cache::KEY_SERMONS, $json);
-        return $json;
+        return $this->api->get_json('/publishing/v2/episodes', array(
+            'per_page' => $limit,
+        ));
     }
 
-    /**
-     * Groups.
-     * Endpoint: /groups/v2/groups
-     */
-    public function get_groups($force_refresh = false, $limit = 50) {
-        $cached = $this->cache->get(PCC_Cache::KEY_GROUPS);
-        if (!$force_refresh && is_array($cached)) {
-            return $cached;
-        }
+    public function get_groups($use_cache = true, $limit = 20) {
+        $limit = max(1, (int)$limit);
 
-        $params = array(
-            'per_page' => intval($limit),
-        );
-
-        $json = $this->api->get_all('/groups/v2/groups', $params, 5);
-        if (is_wp_error($json)) {
-            return $json;
-        }
-
-        $this->cache->set(PCC_Cache::KEY_GROUPS, $json);
-        return $json;
+        return $this->api->get_json('/groups/v2/groups', array(
+            'per_page' => $limit,
+        ));
     }
 }
