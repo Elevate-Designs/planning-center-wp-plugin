@@ -4,69 +4,64 @@ if (!defined('ABSPATH')) { exit; }
 /** @var array $atts */
 
 $per_view = isset($atts['per_view']) ? max(1, (int)$atts['per_view']) : 3;
+$uid = 'pcc_slider_' . wp_generate_uuid4();
 
-$placeholder = defined('PCC_PLUGIN_URL')
-    ? PCC_PLUGIN_URL . 'assets/img/pcc-placeholder.svg'
-    : '';
+function pcc_fmt_range($start_iso, $end_iso) {
+    $start_ts = $start_iso ? strtotime($start_iso) : 0;
+    $end_ts   = $end_iso ? strtotime($end_iso) : 0;
+    if (!$start_ts) return '';
+    $date = wp_date('F j, Y', $start_ts);
+    $time = wp_date(get_option('time_format'), $start_ts);
+    if ($end_ts) {
+        $time2 = wp_date(get_option('time_format'), $end_ts);
+        return $date . ' • ' . $time . ' - ' . $time2;
+    }
+    return $date . ' • ' . $time;
+}
 ?>
-<div class="pcc pcc-events">
-  <div class="pcc-events-slider" data-per-view="<?php echo esc_attr($per_view); ?>">
-    <button class="pcc-slider-btn pcc-prev" type="button" aria-label="<?php esc_attr_e('Previous', 'pcc'); ?>">‹</button>
 
-    <div class="pcc-slider-viewport" tabindex="0" aria-label="<?php esc_attr_e('Events slider', 'pcc'); ?>">
-      <div class="pcc-slider-track">
-        <?php foreach ($items as $it) :
-          $title = isset($it['title']) ? (string)$it['title'] : '';
-          $url   = isset($it['url']) ? (string)$it['url'] : '';
-          $starts = isset($it['starts_at']) ? (string)$it['starts_at'] : '';
-          $ends   = isset($it['ends_at']) ? (string)$it['ends_at'] : '';
-          $desc   = isset($it['description']) ? (string)$it['description'] : '';
-          $img    = isset($it['image_url']) ? (string)$it['image_url'] : '';
-
-          if ($img === '') {
-            $img = $placeholder;
-          }
-
-          // Date formatting (local WP timezone)
-          $date_str = '';
-          $start_ts = $starts ? strtotime($starts) : 0;
-          $end_ts   = $ends ? strtotime($ends) : 0;
-          if ($start_ts) {
-            $date_str = wp_date(get_option('date_format') . ' ' . get_option('time_format'), $start_ts);
-            if ($end_ts) {
-              $date_str .= ' — ' . wp_date(get_option('time_format'), $end_ts);
-            }
-          }
-
-          $desc_clean = wp_strip_all_tags($desc);
-          if (mb_strlen($desc_clean) > 140) {
-            $desc_clean = mb_substr($desc_clean, 0, 140) . '…';
-          }
-        ?>
-          <div class="pcc-slide">
-            <article class="pcc-event-card">
-              <?php if ($url) : ?><a href="<?php echo esc_url($url); ?>"><?php endif; ?>
-                <div class="pcc-event-thumb">
-                  <?php if ($img) : ?>
-                    <img loading="lazy" src="<?php echo esc_url($img); ?>" alt="<?php echo esc_attr($title); ?>">
-                  <?php endif; ?>
-                </div>
-                <div class="pcc-event-body">
-                  <h3 class="pcc-event-title"><?php echo esc_html($title); ?></h3>
-                  <?php if ($date_str) : ?>
-                    <p class="pcc-event-meta"><?php echo esc_html($date_str); ?></p>
-                  <?php endif; ?>
-                  <?php if ($desc_clean) : ?>
-                    <p class="pcc-event-desc"><?php echo esc_html($desc_clean); ?></p>
-                  <?php endif; ?>
-                </div>
-              <?php if ($url) : ?></a><?php endif; ?>
-            </article>
-          </div>
-        <?php endforeach; ?>
-      </div>
+<div class="pcc pcc-events-slider" id="<?php echo esc_attr($uid); ?>" data-per-view="<?php echo esc_attr($per_view); ?>">
+  <div class="pcc-slider__header">
+    <div class="pcc-slider__title">What’s Happening</div>
+    <div class="pcc-slider__controls">
+      <button class="pcc-btn pcc-btn--icon" type="button" data-action="prev" aria-label="Previous">‹</button>
+      <button class="pcc-btn pcc-btn--icon" type="button" data-action="next" aria-label="Next">›</button>
     </div>
+  </div>
 
-    <button class="pcc-slider-btn pcc-next" type="button" aria-label="<?php esc_attr_e('Next', 'pcc'); ?>">›</button>
+  <div class="pcc-slider__track" data-track>
+    <?php foreach ($items as $it):
+        $title = (string)($it['title'] ?? '');
+        $url   = (string)($it['url'] ?? '');
+        $img   = (string)($it['image_url'] ?? '');
+        $loc   = (string)($it['location'] ?? '');
+        $when  = pcc_fmt_range(($it['starts_at'] ?? ''), ($it['ends_at'] ?? ''));
+
+        // simple json for debugging/your request:
+        $card_json = array(
+            'event-name' => $title,
+            'image-url'  => $img,
+        );
+    ?>
+      <article class="pcc-card" data-card data-event='<?php echo esc_attr(wp_json_encode($card_json)); ?>'>
+        <div class="pcc-card__media">
+          <img src="<?php echo esc_url($img); ?>" alt="<?php echo esc_attr($title); ?>" loading="lazy" />
+        </div>
+
+        <div class="pcc-card__body">
+          <?php if ($when): ?><div class="pcc-card__when"><?php echo esc_html($when); ?></div><?php endif; ?>
+          <div class="pcc-card__title"><?php echo esc_html($title); ?></div>
+          <?php if ($loc): ?><div class="pcc-card__meta"><?php echo esc_html($loc); ?></div><?php endif; ?>
+
+          <div class="pcc-card__actions">
+            <?php if ($url): ?>
+              <a class="pcc-btn pcc-btn--primary" href="<?php echo esc_url($url); ?>" target="_blank" rel="noopener">Detail</a>
+            <?php else: ?>
+              <span class="pcc-btn pcc-btn--disabled">Detail</span>
+            <?php endif; ?>
+          </div>
+        </div>
+      </article>
+    <?php endforeach; ?>
   </div>
 </div>

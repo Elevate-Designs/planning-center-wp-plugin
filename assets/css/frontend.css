@@ -1,125 +1,426 @@
-/* PCC Frontend Styles (Events Slider) */
-.pcc { box-sizing: border-box; }
+/* Base */
+.pcc { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
 .pcc * { box-sizing: border-box; }
 
-.pcc-events-slider {
-  position: relative;
-  width: 100%;
-  --pcc-per-view: 3;
-  --pcc-gap: 18px;
+.pcc-error {
+  padding: 14px 16px;
+  border: 1px solid #ff5a5f;
+  background: #fff0f0;
+  color: #7a0a0a;
+  border-radius: 10px;
 }
 
-.pcc-slider-viewport {
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-  padding: 6px 0;
+.pcc-empty {
+  padding: 14px 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  color: #334155;
+  background: #f8fafc;
 }
 
-/* Hide scrollbar (still scrollable) */
-.pcc-slider-viewport::-webkit-scrollbar { height: 8px; }
-.pcc-slider-viewport::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 10px; }
-.pcc-slider-viewport { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,.20) transparent; }
-
-.pcc-slider-track {
-  display: flex;
-  gap: var(--pcc-gap);
-  padding: 0 6px;
-}
-
-.pcc-slide {
-  scroll-snap-align: start;
-  flex: 0 0 calc((100% - (var(--pcc-gap) * (var(--pcc-per-view) - 1))) / var(--pcc-per-view));
-  min-width: 240px; /* prevents super tiny cards */
-}
-
-.pcc-event-card {
-  height: 100%;
-  border-radius: 16px;
-  overflow: hidden;
-  background: #fff;
-  box-shadow: 0 10px 30px rgba(0,0,0,.08);
-}
-
-.pcc-event-card a {
-  color: inherit;
+/* Buttons */
+.pcc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
   text-decoration: none;
-  display: block;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
 }
 
-.pcc-event-thumb {
+.pcc-btn--primary {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0f172a;
+}
+.pcc-btn--dark {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0f172a;
+}
+.pcc-btn--ghost {
+  background: transparent;
+}
+.pcc-btn--icon {
+  width: 38px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+.pcc-btn--disabled {
+  opacity: .5;
+  pointer-events: none;
+}
+
+/* ==============================
+   SLIDER
+================================ */
+.pcc-events-slider {
   width: 100%;
-  aspect-ratio: 16 / 9;
-  background: rgba(0,0,0,.04);
-  position: relative;
 }
 
-.pcc-event-thumb img {
+.pcc-slider__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.pcc-slider__title {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+.pcc-slider__controls {
+  display: flex;
+  gap: 10px;
+}
+
+.pcc-slider__track {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pcc-slider__track::-webkit-scrollbar { height: 10px; }
+.pcc-slider__track::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+.pcc-slider__track::-webkit-scrollbar-track { background: transparent; }
+
+.pcc-card {
+  flex: 0 0 auto;
+  width: 340px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 30px rgba(2, 6, 23, 0.06);
+  scroll-snap-align: start;
+}
+
+.pcc-card__media {
+  aspect-ratio: 16 / 9;
+  background: #0f172a;
+}
+.pcc-card__media img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.pcc-event-body {
+.pcc-card__body {
   padding: 14px 14px 16px;
 }
-
-.pcc-event-title {
-  margin: 0 0 8px;
+.pcc-card__when {
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 6px;
+}
+.pcc-card__title {
   font-size: 18px;
-  line-height: 1.25;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 6px;
+  line-height: 1.2;
+}
+.pcc-card__meta {
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 12px;
 }
 
-.pcc-event-meta {
-  font-size: 14px;
-  opacity: .75;
-  margin: 0 0 10px;
+.pcc-card__actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
-.pcc-event-desc {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.45;
-  opacity: .9;
+/* Responsive slider width based on per_view (JS will scroll) */
+@media (max-width: 900px) {
+  .pcc-card { width: 300px; }
+}
+@media (max-width: 520px) {
+  .pcc-card { width: 88vw; }
 }
 
-/* Buttons */
-.pcc-slider-btn {
+/* ==============================
+   CALENDAR VIEW (screenshot-like)
+================================ */
+.pcc-calendar__title {
+  font-size: 48px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  margin: 10px 0 18px;
+  color: #0f172a;
+  text-align: center;
+}
+
+.pcc-calendar__top {
+  max-width: 980px;
+  margin: 0 auto 14px;
+}
+
+.pcc-calendar__searchrow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.pcc-calendar__search {
+  position: relative;
+}
+.pcc-calendar__search input {
+  width: 100%;
+  height: 40px;
+  padding: 0 14px 0 38px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  outline: none;
+}
+.pcc-calendar__searchicon {
   position: absolute;
+  left: 12px;
   top: 50%;
   transform: translateY(-50%);
+  opacity: .6;
+}
+
+.pcc-calendar__dropdown { position: relative; }
+.pcc-calendar__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 220px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(2,6,23,.12);
+  padding: 8px;
+  display: none;
+  z-index: 20;
+}
+.pcc-calendar__menu.is-open { display: block; }
+.pcc-calendar__menu button {
+  width: 100%;
+  text-align: left;
+  padding: 10px 10px;
+  border-radius: 10px;
   border: 0;
-  width: 44px;
-  height: 44px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.92);
-  box-shadow: 0 10px 30px rgba(0,0,0,.12);
+  background: transparent;
   cursor: pointer;
+  font-weight: 700;
+}
+.pcc-calendar__menu button:hover {
+  background: #f1f5f9;
+}
+
+.pcc-calendar__navrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.pcc-calendar__nav { display: flex; gap: 8px; align-items: center; }
+
+.pcc-calendar__month {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 900;
+  font-size: 22px;
+}
+
+.pcc-calendar__pill {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  font-weight: 800;
+  color: #334155;
+}
+
+.pcc-calendar__gridwrap {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.pcc-calendar__dow {
   display: grid;
-  place-items: center;
-  font-size: 26px;
-  line-height: 1;
-  user-select: none;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+  margin-bottom: 6px;
+  color: #475569;
+  font-weight: 800;
+  font-size: 12px;
+}
+.pcc-calendar__dow > div { padding: 10px 10px; }
+
+.pcc-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
-.pcc-slider-btn:disabled {
-  opacity: .45;
-  cursor: default;
+.pcc-day {
+  min-height: 110px;
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 10px 10px 12px;
+  background: #ffffff;
+  position: relative;
 }
 
-.pcc-prev { left: 6px; }
-.pcc-next { right: 6px; }
+.pcc-day:nth-child(7n) { border-right: 0; }
 
-@media (max-width: 980px) {
-  .pcc-events-slider { --pcc-per-view: 2; }
-  .pcc-slider-btn { width: 40px; height: 40px; font-size: 24px; }
+.pcc-day__num {
+  font-weight: 900;
+  color: #0f172a;
+  margin-bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
-@media (max-width: 640px) {
-  .pcc-events-slider { --pcc-per-view: 1; }
-  .pcc-slide { min-width: 0; }
-  .pcc-prev { left: 2px; }
-  .pcc-next { right: 2px; }
+.pcc-day__num .is-today {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #fff;
+  justify-content: center;
+  align-items: center;
+  font-size: 12px;
+}
+
+.pcc-ev {
+  display: block;
+  margin-bottom: 6px;
+  cursor: pointer;
+  color: #0f172a;
+  text-decoration: none;
+}
+.pcc-ev__time {
+  font-size: 11px;
+  color: #475569;
+}
+.pcc-ev__title {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  max-height: 2.4em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pcc-ev:hover .pcc-ev__title {
+  text-decoration: underline;
+}
+
+/* Modal popup (detail card) */
+.pcc-modal[hidden] { display: none; }
+.pcc-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
+.pcc-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 6, 23, .55);
+}
+.pcc-modal__card {
+  position: absolute;
+  right: 6vw;
+  top: 24vh;
+  width: min(360px, 92vw);
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(2,6,23,.35);
+  border: 1px solid rgba(255,255,255,.2);
+}
+.pcc-modal__close {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(0,0,0,.55);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  z-index: 2;
+}
+.pcc-modal__img { aspect-ratio: 16/9; background: #0f172a; }
+.pcc-modal__img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pcc-modal__content { padding: 14px 14px 16px; }
+.pcc-modal__when { font-size: 12px; color: #475569; margin-bottom: 6px; font-weight: 700; }
+.pcc-modal__title { font-size: 18px; font-weight: 900; color: #0f172a; margin-bottom: 8px; }
+.pcc-modal__meta { font-size: 12px; color: #475569; margin-bottom: 10px; }
+.pcc-modal__desc { font-size: 12px; color: #0f172a; opacity: .9; line-height: 1.5; max-height: 7.5em; overflow: auto; margin-bottom: 12px; }
+.pcc-modal__actions { display: flex; justify-content: stretch; }
+.pcc-modal__actions .pcc-btn { width: 100%; height: 44px; border-radius: 12px; }
+
+@media (max-width: 800px) {
+  .pcc-calendar__searchrow {
+    grid-template-columns: 1fr;
+  }
+  .pcc-calendar__navrow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .pcc-modal__card {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    top: 18vh;
+  }
+}
+
+/* List view (optional) */
+.pcc-events-list .pcc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.pcc-events-list .pcc-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.pcc-events-list .pcc-list__title {
+  font-weight: 900;
+}
+.pcc-events-list .pcc-list__meta {
+  color: #475569;
+  font-size: 12px;
+  margin-top: 4px;
 }
