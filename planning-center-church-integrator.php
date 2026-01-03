@@ -1,52 +1,66 @@
 <?php
 /**
  * Plugin Name: Planning Center Church Integrator
- * Description: Pull Events (Calendar) from Planning Center and display on your WordPress site via shortcodes.
- * Version: 1.0.25
- * Author: Elevate Designs
+ * Description: Pull Events (Calendar), Sermons (Publishing Episodes), and Groups from Planning Center and display them on your WordPress site via shortcodes.
+ * Version: 1.0.26
+ * Author: Sagitarisandy
  * Text Domain: pcc
  * Requires at least: 6.0
  * Requires PHP: 7.4
  */
 
-if (!defined('ABSPATH')) { exit; }
-
-/**
- * Constants
- */
-define('PCC_VERSION', '1.0.25');
-define('PCC_PLUGIN_FILE', __FILE__);
-define('PCC_PLUGIN_DIR', plugin_dir_path(__FILE__));
-define('PCC_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('PCC_OPTION_KEY', 'pcc_settings');
-define('PCC_CACHE_GROUP', 'pcc');
-define('PCC_API_BASE', 'https://api.planningcenteronline.com');
-
-/**
- * Includes
- */
-$inc = PCC_PLUGIN_DIR . 'includes/';
-require_once $inc . 'class-pcc-crypto.php';
-require_once $inc . 'class-pcc-cache.php';
-require_once $inc . 'class-pcc-api.php';
-require_once $inc . 'class-pcc-data.php';
-require_once $inc . 'class-pcc-shortcodes.php';
-require_once $inc . 'class-pcc-cron.php';
-require_once $inc . 'class-pcc-plugin.php';
-
-/**
- * Bootstrap helper
- */
-function pcc() {
-    return class_exists('PCC_Plugin') ? PCC_Plugin::instance() : null;
+if (!defined('ABSPATH')) {
+    exit;
 }
 
-add_action('plugins_loaded', function () {
-    pcc();
-});
+/**
+ * =====================================================
+ * Constants
+ * =====================================================
+ */
+if (!defined('PCC_VERSION')) {
+    define('PCC_VERSION', '1.0.26');
+}
+if (!defined('PCC_PLUGIN_FILE')) {
+    define('PCC_PLUGIN_FILE', __FILE__);
+}
+if (!defined('PCC_PLUGIN_DIR')) {
+    define('PCC_PLUGIN_DIR', plugin_dir_path(__FILE__));
+}
+if (!defined('PCC_PLUGIN_URL')) {
+    define('PCC_PLUGIN_URL', plugin_dir_url(__FILE__));
+}
+if (!defined('PCC_OPTION_KEY')) {
+    define('PCC_OPTION_KEY', 'pcc_settings');
+}
+if (!defined('PCC_CACHE_GROUP')) {
+    define('PCC_CACHE_GROUP', 'pcc');
+}
+if (!defined('PCC_API_BASE')) {
+    define('PCC_API_BASE', 'https://api.planningcenteronline.com');
+}
 
 /**
+ * =====================================================
+ * Includes (minimal - PCC_Plugin will load the rest)
+ * =====================================================
+ */
+$includes_dir = PCC_PLUGIN_DIR . 'includes/';
+
+// Cron class must be available at activation hook registration.
+if (file_exists($includes_dir . 'class-pcc-cron.php')) {
+    require_once $includes_dir . 'class-pcc-cron.php';
+}
+
+// PCC_Plugin is the main service container.
+if (file_exists($includes_dir . 'class-pcc-plugin.php')) {
+    require_once $includes_dir . 'class-pcc-plugin.php';
+}
+
+/**
+ * =====================================================
  * Activation / Deactivation
+ * =====================================================
  */
 if (class_exists('PCC_Cron')) {
     register_activation_hook(PCC_PLUGIN_FILE, array('PCC_Cron', 'activate'));
@@ -54,7 +68,28 @@ if (class_exists('PCC_Cron')) {
 }
 
 /**
- * GitHub Auto Update (optional)
+ * =====================================================
+ * Bootstrap
+ * =====================================================
+ */
+if (!function_exists('pcc')) {
+    /**
+     * @return PCC_Plugin|null
+     */
+    function pcc() {
+        return class_exists('PCC_Plugin') ? PCC_Plugin::instance() : null;
+    }
+}
+
+add_action('plugins_loaded', function () {
+    // Ensure everything is loaded before init.
+    pcc();
+}, 5);
+
+/**
+ * =====================================================
+ * GitHub Auto Update (Plugin Update Checker)
+ * =====================================================
  */
 $updaterPath = PCC_PLUGIN_DIR . 'plugin-update-checker/plugin-update-checker.php';
 if (file_exists($updaterPath)) {
@@ -66,6 +101,10 @@ if (file_exists($updaterPath)) {
             PCC_PLUGIN_FILE,
             'planning-center-church-integrator'
         );
-        $updateChecker->getVcsApi()->enableReleaseAssets();
+
+        // Use GitHub Releases assets if present.
+        if (method_exists($updateChecker, 'getVcsApi')) {
+            $updateChecker->getVcsApi()->enableReleaseAssets();
+        }
     }
 }
