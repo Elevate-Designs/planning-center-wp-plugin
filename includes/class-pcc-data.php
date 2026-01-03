@@ -9,170 +9,191 @@ final class PCC_Data {
     /** @var PCC_Cache|null */
     private $cache;
 
-    public function __construct($api, $cache = null) {
+    public function __construct(PCC_API $api, $cache = null) {
         $this->api   = $api;
         $this->cache = $cache;
     }
 
-    /**
-     * Fetch upcoming event instances (public times only) + include=event to get image.
-     * Returns normalized array: each item has:
-     *  - title, url, starts_at, ends_at, location, image_url, description
-     */
-    public function get_events($force = false, $limit = 50) {
-        $limit = max(1, (int)$limit);
-
-        $cache_key = 'events_v2_' . $limit;
-        if (!$force && $this->cache) {
-            $cached = $this->cache->get($cache_key);
-            if (is_array($cached)) return $cached;
-        }
-
-        // Pull future instances and include event (for image/desc/location)
-        // NOTE: Planning Center Calendar API supports include=event
-        $params = array(
-            'per_page' => $limit,
-            'include'  => 'event',
-            'order'    => 'starts_at',
-            'filter'   => 'future',
-        );
-
-        $json = $this->api->get_json('/calendar/v2/event_instances', $params);
-        if (is_wp_error($json)) return $json;
-
-        $items = $this->normalize_event_instances_with_event($json);
-
-        // "Public times only" -> keep only instances that have public_url
-        $items = array_values(array_filter($items, function($it) {
-            return !empty($it['url']);
-        }));
-
-        if ($this->cache) {
-            // cache 10 minutes (adjust if needed)
-            $this->cache->set($cache_key, $items, 10 * MINUTE_IN_SECONDS);
-        }
-
-        return $items;
+    private function cache_get($key) {
+        if ($this->cache && method_exists($this->cache, 'get')) return $this->cache->get($key);
+        return false;
+    }
+    private function cache_set($key, $value, $ttl = 300) {
+        if ($this->cache && method_exists($this->cache, 'set')) return $this->cache->set($key, $value, $ttl);
+        return false;
     }
 
-    private function normalize_event_instances_with_event($json) {
-        $out = array();
+    /**
+     * Slider data:
+     * - default: upcoming 60 hari
+     * - $public_only: kalau true, filter event yang punya public/church_center url
+     * - auto fallback: kalau kosong, coba ulang tanpa public_only
+     */
+    public function get_events_slider($max = 6, $public_only = true) {
+        $max = max(1, (int)$max);
 
-        $data = isset($json['data']) && is_array($json['data']) ? $json['data'] : array();
-        $included = isset($json['included']) && is_array($json['included']) ? $json['included'] : array();
+        $now = current_time('timestamp');
+        $start = gmdate('Y-m-d\T00:00:00\Z', $now);
+        $end   = gmdate('Y-m-d\T23:59:59\Z', $now + 60 * DAY_IN_SECONDS);
 
-        // Map included event by id
-        $event_map = array();
+        $items = $this->get_events_range($start, $end, 100, $public_only);
+
+        if ($public_only && empty($items)) {
+            // fallback biar tidak blank
+            $items = $this->get_events_range($start, $end, 100, false);
+        }
+
+        return array_slice($items, 0, $max);
+    }
+
+    /**
+     * Calendar data by range (ISO UTC strings)
+     */
+    public function get_events_range($starts_gte_iso, $starts_lte_iso, $per_page = 100, $public_only = true) {
+        $cache_key = 'events_range_' . md5($starts_gte_iso . '|' . $starts_lte_iso . '|' . (int)$per_page . '|' . ($public_only ? '1' : '0'));
+
+        $cached = $this->cache_get($cache_key);
+        if (is_array($cached)) return $cached;
+
+        $q = array(
+            'per_page' => max(1, (int)$per_page),
+            'include'  => 'event',
+            'order'    => 'starts_at',
+            // date range
+            'where[starts_at][gte]' => $starts_gte_iso,
+            'where[starts_at][lte]' => $starts_lte_iso,
+        );
+
+        $json = $this->api->get_event_instances($q);
+        if (is_wp_error($json)) {
+            $this->cache_set($cache_key, array(), 60);
+            return array();
+        }
+
+        $data = $json['data'] ?? array();
+        $included = $json['included'] ?? array();
+
+        // Map included events by id
+        $eventsById = array();
         foreach ($included as $inc) {
             if (!is_array($inc)) continue;
             if (($inc['type'] ?? '') !== 'Event') continue;
             $eid = (string)($inc['id'] ?? '');
             if ($eid === '') continue;
-
-            $attrs = isset($inc['attributes']) && is_array($inc['attributes']) ? $inc['attributes'] : array();
-
-            $event_map[$eid] = array(
-                'title'       => (string)($attrs['name'] ?? $attrs['summary'] ?? ''),
-                'description' => (string)($attrs['description'] ?? $attrs['summary'] ?? ''),
-                'location'    => (string)($attrs['location'] ?? $attrs['location_name'] ?? ''),
-                'image_url'   => $this->extract_event_image_url($attrs),
-            );
+            $eventsById[$eid] = $inc;
         }
 
-        foreach ($data as $node) {
-            if (!is_array($node)) continue;
+        $items = array();
 
-            $attrs = isset($node['attributes']) && is_array($node['attributes']) ? $node['attributes'] : array();
+        foreach ($data as $row) {
+            if (!is_array($row)) continue;
 
-            // Relationship -> event id
+            $attrs = $row['attributes'] ?? array();
+            $rels  = $row['relationships'] ?? array();
+
+            $starts_at = $attrs['starts_at'] ?? '';
+            $ends_at   = $attrs['ends_at'] ?? '';
+
+            // related event id
             $event_id = '';
-            if (!empty($node['relationships']['event']['data']['id'])) {
-                $event_id = (string)$node['relationships']['event']['data']['id'];
+            if (isset($rels['event']['data']['id'])) {
+                $event_id = (string)$rels['event']['data']['id'];
             }
 
-            $event_meta = $event_id && isset($event_map[$event_id]) ? $event_map[$event_id] : array();
+            $event = $eventsById[$event_id] ?? null;
+            $eattr = is_array($event) ? ($event['attributes'] ?? array()) : array();
 
-            $title = (string)($attrs['summary'] ?? $event_meta['title'] ?? '');
-            $url   = (string)($attrs['public_url'] ?? '');
-            $starts= (string)($attrs['starts_at'] ?? '');
-            $ends  = (string)($attrs['ends_at'] ?? '');
+            $title = (string)($eattr['name'] ?? $eattr['title'] ?? '');
+            if ($title === '') $title = (string)($attrs['name'] ?? '');
 
-            $location = (string)($attrs['location'] ?? $attrs['location_name'] ?? ($event_meta['location'] ?? ''));
-            $desc     = (string)($event_meta['description'] ?? '');
-
-            $img = (string)($event_meta['image_url'] ?? '');
-            if ($img === '') {
-                $img = $this->placeholder_image_data_uri();
-            }
-
-            $out[] = array(
-                'id'          => (string)($node['id'] ?? ''),
-                'event_id'    => $event_id,
-                'title'       => $title,
-                'url'         => $url,
-                'starts_at'   => $starts,
-                'ends_at'     => $ends,
-                'location'    => $location,
-                'description' => $desc,
-                'image_url'   => $img,
+            // Public / Church Center URL (filter "Public times only")
+            $url = (string)(
+                $eattr['church_center_url']
+                ?? $eattr['public_url']
+                ?? $eattr['url']
+                ?? $eattr['website_url']
+                ?? ''
             );
-        }
 
-        return $out;
-    }
-
-    /**
-     * Try a bunch of possible attribute keys used by Planning Center for event images.
-     * If none found, return empty string.
-     */
-    private function extract_event_image_url($attrs) {
-        if (!is_array($attrs)) return '';
-
-        $candidates = array(
-            'image_url',
-            'image_thumbnail_url',
-            'image_thumb_url',
-            'image_medium_url',
-            'photo_url',
-            'banner_url',
-            'cover_image_url',
-        );
-
-        foreach ($candidates as $k) {
-            if (!empty($attrs[$k]) && is_string($attrs[$k])) {
-                return trim($attrs[$k]);
+            // Some APIs store booleans for Church Center visibility
+            $cc_visible = null;
+            foreach (array('visible_in_church_center', 'show_in_church_center', 'published_to_church_center') as $k) {
+                if (array_key_exists($k, $eattr)) { $cc_visible = (bool)$eattr[$k]; break; }
             }
-        }
 
-        // Sometimes it's nested
-        if (!empty($attrs['image']) && is_array($attrs['image'])) {
-            foreach (array('url','large','medium','small','thumbnail') as $k) {
-                if (!empty($attrs['image'][$k]) && is_string($attrs['image'][$k])) {
-                    return trim($attrs['image'][$k]);
+            if ($public_only) {
+                // “Public times only”: paling aman = harus ada url publik ATAU flag visible true
+                if ($url === '' && $cc_visible !== true) {
+                    continue;
                 }
             }
+
+            // Description/summary
+            $desc = (string)(
+                $eattr['description']
+                ?? $eattr['summary']
+                ?? $eattr['details']
+                ?? ''
+            );
+
+            // Event image: coba beberapa key umum
+            $image = (string)(
+                $eattr['image_url']
+                ?? $eattr['image_thumbnail_url']
+                ?? $eattr['banner_image_url']
+                ?? $eattr['thumbnail_url']
+                ?? ''
+            );
+
+            $location = (string)($eattr['location'] ?? $eattr['location_name'] ?? '');
+
+            $items[] = array(
+                'event_id'     => $event_id,
+                'title'        => $title,
+                'url'          => $url,
+                'starts_at'    => $starts_at,
+                'ends_at'      => $ends_at,
+                'description'  => $desc,
+                'location'     => $location,
+                'image_url'    => $image,
+            );
         }
 
-        return '';
+        // Sort by starts_at
+        usort($items, function($a, $b) {
+            return strcmp((string)$a['starts_at'], (string)$b['starts_at']);
+        });
+
+        $this->cache_set($cache_key, $items, 300);
+        return $items;
     }
 
     /**
-     * Inline SVG placeholder (no extra file needed).
+     * Calendar month data: returns items for month + next months count
      */
-    private function placeholder_image_data_uri() {
-        $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450">
-            <defs>
-              <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
-                <stop offset="0" stop-color="#0f172a"/>
-                <stop offset="1" stop-color="#334155"/>
-              </linearGradient>
-            </defs>
-            <rect width="800" height="450" fill="url(#g)"/>
-            <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
-              font-family="Arial, sans-serif" font-size="34" fill="#e2e8f0">Event</text>
-          </svg>';
+    public function get_calendar_months($months = 2, $public_only = true) {
+        $months = max(1, min(6, (int)$months));
 
-        $svg = rawurlencode($svg);
-        return 'data:image/svg+xml;utf8,' . $svg;
+        $tz = wp_timezone();
+        $now = new DateTime('now', $tz);
+
+        $start = (clone $now)->modify('first day of this month')->setTime(0,0,0);
+        $end   = (clone $start)->modify('first day of +' . $months . ' month')->modify('-1 day')->setTime(23,59,59);
+
+        // Convert to UTC ISO
+        $start_utc = (clone $start)->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\T00:00:00\Z');
+        $end_utc   = (clone $end)->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\T23:59:59\Z');
+
+        $items = $this->get_events_range($start_utc, $end_utc, 200, $public_only);
+
+        if ($public_only && empty($items)) {
+            $items = $this->get_events_range($start_utc, $end_utc, 200, false);
+        }
+
+        return $items;
+    }
+
+    public function get_last_error() {
+        return $this->api->get_last_error();
     }
 }

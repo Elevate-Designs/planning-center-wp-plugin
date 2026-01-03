@@ -4,110 +4,76 @@ if (!defined('ABSPATH')) { exit; }
 final class PCC_Shortcodes {
 
     public static function register() {
-        add_shortcode('pcc_events',  array(__CLASS__, 'events_shortcode'));
-        add_shortcode('pcc_sermons', array(__CLASS__, 'sermons_shortcode'));
-        add_shortcode('pcc_groups',  array(__CLASS__, 'groups_shortcode'));
+        add_shortcode('pcc_events', array(__CLASS__, 'events_shortcode'));
+        add_shortcode('pcc_calendar', array(__CLASS__, 'calendar_shortcode'));
     }
 
-    /**
-     * [pcc_events per_view="3" max="6"]               -> slider default
-     * [pcc_events view="calendar"]                    -> calendar grid + popup
-     * [pcc_events view="list"]                        -> simple list
-     */
-    public static function events_shortcode($atts) {
-
+    public static function events_shortcode($atts = array()) {
         $atts = shortcode_atts(array(
-            'view'     => 'slider', // slider | calendar | list
-            'limit'    => 80,       // how many to fetch from API
-            'max'      => 6,        // how many to show (slider/list)
-            'per_view' => 3,        // slider cards visible
+            'per_view'    => 3,
+            'max'         => 6,
+            'public_only' => 1,
         ), $atts, 'pcc_events');
 
-        $view     = sanitize_key((string)$atts['view']);
-        $limit    = max(1, (int)$atts['limit']);
-        $max      = max(1, (int)$atts['max']);
-        $per_view = max(1, (int)$atts['per_view']);
-
-        $plugin = function_exists('pcc') ? pcc() : null;
-        if (!$plugin || empty($plugin->api) || !$plugin->api->has_credentials()) {
-            return '<div class="pcc-error">Planning Center credentials are not set.</div>';
+        $plugin = pcc();
+        if (!$plugin || !$plugin->data) {
+            return '<div class="pcc pcc-empty">Plugin not initialized.</div>';
         }
 
-        // enqueue CSS always
-        wp_enqueue_style('pcc-frontend');
+        $items = $plugin->data->get_events_slider((int)$atts['max'], ((int)$atts['public_only'] === 1));
 
-        // Fetch events (public only is enforced inside PCC_Data)
-        // For calendar, fetch more so we can render multiple months.
-        $fetch_limit = ($view === 'calendar') ? max($limit, 200) : max($limit, $max);
-        $events = $plugin->data->get_events(false, $fetch_limit);
-        if (is_wp_error($events)) {
-            return self::render_error($events);
+        if (empty($items)) {
+            $msg = 'Events will appear here.';
+            $err = $plugin->data->get_last_error();
+            if (defined('WP_DEBUG') && WP_DEBUG && $err) {
+                $msg .= ' <small style="display:block;opacity:.7;margin-top:6px;">' . esc_html($err) . '</small>';
+            }
+            return '<div class="pcc pcc-empty">' . $msg . '</div>';
         }
-
-        if (!is_array($events) || empty($events)) {
-            return '<div class="pcc-empty">Events will appear here.</div>';
-        }
-
-        if ($view === 'calendar') {
-            wp_enqueue_script('pcc-events-calendar');
-            return self::render_template('events-calendar.php', array(
-                'items' => $events,
-                'atts'  => $atts,
-            ));
-        }
-
-        // slider or list: take max
-        $events = array_slice($events, 0, $max);
-
-        if ($view === 'list') {
-            return self::render_template('events-plain-list.php', array(
-                'items' => $events,
-                'atts'  => $atts,
-            ));
-        }
-
-        // default slider
-        wp_enqueue_script('pcc-events-slider');
-        return self::render_template('events-list.php', array(
-            'items' => $events,
-            'atts'  => array(
-                'per_view' => $per_view,
-                'max'      => $max,
-            ),
-        ));
-    }
-
-    // --- sermons/groups keep as-is (minimal) ---
-    public static function sermons_shortcode($atts) {
-        return '<div class="pcc-empty">Sermons shortcode not configured in this snippet.</div>';
-    }
-    public static function groups_shortcode($atts) {
-        return '<div class="pcc-empty">Groups shortcode not configured in this snippet.</div>';
-    }
-
-    private static function render_error($err) {
-        if (!is_wp_error($err)) return '';
-        return '<div class="pcc-error">' . esc_html($err->get_error_message()) . '</div>';
-    }
-
-    private static function render_template($template_file, $vars = array()) {
-        $path = self::locate_template($template_file);
-        if (!$path) return '';
 
         ob_start();
-        extract($vars, EXTR_SKIP);
-        include $path;
+        $template = PCC_PLUGIN_DIR . 'templates/events-list.php';
+        if (file_exists($template)) {
+            $atts_local = $atts;
+            $items_local = $items;
+            $atts = $atts_local;  // for template
+            $items = $items_local;
+            include $template;
+        } else {
+            echo '<div class="pcc pcc-empty">Template missing: templates/events-list.php</div>';
+        }
         return ob_get_clean();
     }
 
-    private static function locate_template($template_file) {
-        // allow theme override: /wp-content/themes/your-theme/planning-center/<file>
-        $theme_path = locate_template('planning-center/' . $template_file);
-        if ($theme_path) return $theme_path;
+    public static function calendar_shortcode($atts = array()) {
+        $atts = shortcode_atts(array(
+            'months'      => 2,
+            'public_only' => 1,
+        ), $atts, 'pcc_calendar');
 
-        $plugin_path = PCC_PLUGIN_DIR . 'includes/templates/' . $template_file;
-        if (file_exists($plugin_path)) return $plugin_path;
+        $plugin = pcc();
+        if (!$plugin || !$plugin->data) {
+            return '<div class="pcc pcc-empty">Plugin not initialized.</div>';
+        }
 
-        return '';
+        $items = $plugin->data->get_calendar_months((int)$atts['months'], ((int)$atts['public_only'] === 1));
+
+        if (empty($items)) {
+            $msg = 'No events found for calendar.';
+            $err = $plugin->data->get_last_error();
+            if (defined('WP_DEBUG') && WP_DEBUG && $err) {
+                $msg .= ' <small style="display:block;opacity:.7;margin-top:6px;">' . esc_html($err) . '</small>';
+            }
+            return '<div class="pcc pcc-empty">' . $msg . '</div>';
+        }
+
+        ob_start();
+        $template = PCC_PLUGIN_DIR . 'templates/calendar-view.php';
+        if (file_exists($template)) {
+            include $template;
+        } else {
+            echo '<div class="pcc pcc-empty">Template missing: templates/calendar-view.php</div>';
+        }
+        return ob_get_clean();
     }
 }
