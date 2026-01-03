@@ -1,104 +1,133 @@
 (function () {
   "use strict";
 
-  function qs(root, sel) { return root.querySelector(sel); }
-  function qsa(root, sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); }
+  function $(sel, root) { return (root || document).querySelector(sel); }
+  function $all(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
 
-  function openModal(root, payload) {
-    var modal = qs(root, "[data-pcc-modal]");
-    if (!modal) return;
+  function safeText(el, v) { if (el) el.textContent = v || ""; }
+  function safeAttr(el, k, v) { if (el) el.setAttribute(k, v || ""); }
 
-    var img = qs(modal, "[data-pcc-modal-img]");
-    var time = qs(modal, "[data-pcc-modal-time]");
-    var title = qs(modal, "[data-pcc-modal-title]");
-    var loc = qs(modal, "[data-pcc-modal-loc]");
-    var desc = qs(modal, "[data-pcc-modal-desc]");
-    var link = qs(modal, "[data-pcc-modal-link]");
+  function positionPop(pop, x, y) {
+    const pad = 12;
+    const w = pop.offsetWidth || 320;
+    const h = pop.offsetHeight || 380;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
 
-    var imageUrl = payload.image_url || (window.PCC_CAL && PCC_CAL.placeholder) || "";
-    img.src = imageUrl;
-    img.alt = payload.title || "";
+    let left = x + 14;
+    let top = y - 10;
 
-    time.textContent = payload.time || "";
-    title.textContent = payload.title || "";
-    loc.textContent = [payload.location, payload.address].filter(Boolean).join(" · ");
-    desc.textContent = (payload.description || "").replace(/<\/?[^>]+(>|$)/g, "").trim();
+    if (left + w + pad > vw) left = x - w - 14;
+    if (top + h + pad > vh) top = vh - h - pad;
+    if (top < pad) top = pad;
+    if (left < pad) left = pad;
 
-    if (payload.url) {
-      link.href = payload.url;
-      link.style.display = "";
-    } else {
-      link.style.display = "none";
-    }
-
-    modal.hidden = false;
-    document.body.classList.add("pcc-modal-open");
-  }
-
-  function closeModal(root) {
-    var modal = qs(root, "[data-pcc-modal]");
-    if (!modal) return;
-    modal.hidden = true;
-    document.body.classList.remove("pcc-modal-open");
+    pop.style.left = left + "px";
+    pop.style.top = top + "px";
   }
 
   function initCalendar(root) {
-    if (root.dataset.pccInited === "1") return;
-    root.dataset.pccInited = "1";
+    const months = $all(".pcc-month", root);
+    if (!months.length) return;
 
-    var monthsWrap = qs(root, "[data-pcc-cal-months]");
-    var months = qsa(root, "[data-pcc-cal-month]");
-    var title = qs(root, "[data-pcc-cal-title]");
+    const titleEl = $(".pcc-cal-title", root);
+    const prevBtn = $(".pcc-cal-prev", root);
+    const nextBtn = $(".pcc-cal-next", root);
+    const todayBtn = $(".pcc-cal-today", root);
+    const qInput = $(".pcc-cal-q", root);
 
-    var idx = 0;
+    const pop = $("#pcc-pop", root);
+    const popClose = $(".pcc-pop-close", pop);
+    const popImg = $(".pcc-pop-img img", pop);
+    const popDate = $(".pcc-pop-date", pop);
+    const popTitle = $(".pcc-pop-title", pop);
+    const popLoc = $(".pcc-pop-loc", pop);
+    const popDesc = $(".pcc-pop-desc", pop);
+    const popLink = $(".pcc-pop-link", pop);
 
-    function show(i) {
-      idx = Math.max(0, Math.min(months.length - 1, i));
-      months.forEach(function (m, mi) {
-        m.hidden = mi !== idx;
-      });
+    let idx = months.findIndex(m => m.style.display !== "none");
+    if (idx < 0) idx = 0;
 
-      var lab = qs(months[idx], "[data-month-label]");
-      if (lab && title) title.textContent = lab.getAttribute("data-month-label") || "";
+    function setTitle() {
+      const key = months[idx].dataset.month; // YYYY-MM
+      if (!key) return;
+      const parts = key.split("-");
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const dt = new Date(y, m, 1);
+      const label = dt.toLocaleString(undefined, { month: "long", year: "numeric" });
+      safeText(titleEl, label);
     }
 
-    var prev = qs(root, "[data-pcc-cal-prev]");
-    var next = qs(root, "[data-pcc-cal-next]");
-    var today = qs(root, "[data-pcc-cal-today]");
+    function showMonth(i) {
+      idx = Math.max(0, Math.min(months.length - 1, i));
+      months.forEach((m, k) => { m.style.display = (k === idx ? "" : "none"); });
+      setTitle();
+      closePop();
+    }
 
-    if (prev) prev.addEventListener("click", function(){ show(idx - 1); });
-    if (next) next.addEventListener("click", function(){ show(idx + 1); });
-    if (today) today.addEventListener("click", function(){ show(0); });
+    function closePop() {
+      pop.classList.remove("open");
+    }
 
-    // Event click => modal
-    root.addEventListener("click", function (e) {
-      var btn = e.target.closest(".pcc-cal-event");
-      if (btn && btn.dataset.pccEvent) {
-        try {
-          var payload = JSON.parse(btn.dataset.pccEvent);
-          openModal(root, payload);
-        } catch (err) {}
-      }
+    function openPop(evEl, mouseEvent) {
+      const title = evEl.dataset.title || "";
+      const url = evEl.dataset.url || "#";
+      const img = evEl.dataset.img || root.dataset.placeholder || "";
+      const date = evEl.dataset.date || "";
+      const time = evEl.dataset.time || "";
+      const loc = evEl.dataset.loc || "";
+      const desc = evEl.dataset.desc || "";
 
-      if (e.target.matches("[data-pcc-modal-close]")) {
-        closeModal(root);
-      }
+      safeAttr(popImg, "src", img);
+      safeAttr(popImg, "alt", title);
+      safeText(popDate, (date && time) ? (date + " @ " + time) : (date || time));
+      safeText(popTitle, title);
+      safeText(popLoc, loc);
+      safeText(popDesc, desc);
+      safeAttr(popLink, "href", url);
+
+      pop.classList.add("open");
+      positionPop(pop, mouseEvent.clientX, mouseEvent.clientY);
+    }
+
+    // Bind event click
+    $all(".pcc-evt", root).forEach(el => {
+      el.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openPop(el, e);
+      });
     });
 
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") closeModal(root);
+    // Close handlers
+    if (popClose) popClose.addEventListener("click", closePop);
+    document.addEventListener("click", function () {
+      closePop();
     });
+    window.addEventListener("resize", closePop);
+    window.addEventListener("scroll", closePop, { passive: true });
 
-    show(0);
+    // Month nav
+    if (prevBtn) prevBtn.addEventListener("click", () => showMonth(idx - 1));
+    if (nextBtn) nextBtn.addEventListener("click", () => showMonth(idx + 1));
+    if (todayBtn) todayBtn.addEventListener("click", () => showMonth(0));
+
+    // Simple search filter
+    function applySearch() {
+      const q = (qInput && qInput.value || "").trim().toLowerCase();
+      $all(".pcc-evt", root).forEach(el => {
+        const t = (el.dataset.title || "").toLowerCase();
+        el.style.display = (!q || t.includes(q)) ? "" : "none";
+      });
+      closePop();
+    }
+    if (qInput) qInput.addEventListener("input", applySearch);
+
+    setTitle();
   }
 
-  function scan() {
-    document.querySelectorAll("[data-pcc-calendar]").forEach(initCalendar);
-  }
-
-  document.addEventListener("DOMContentLoaded", scan);
-
-  // Divi/dynamic DOM
-  var mo = new MutationObserver(scan);
-  mo.observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".pcc-cal").forEach(initCalendar);
+  });
 })();

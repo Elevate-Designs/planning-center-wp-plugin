@@ -14,7 +14,10 @@
 
   function computePerView(slider) {
     const wanted = parseInt(slider.dataset.perView || "3", 10) || 3;
-    const w = window.innerWidth || document.documentElement.clientWidth || 1024;
+
+    // ✅ pakai container width (Divi kadang beda dari window width)
+    const rect = slider.getBoundingClientRect();
+    const w = rect.width || window.innerWidth || 1024;
 
     if (w <= 640) return 1;
     if (w <= 980) return Math.min(2, wanted);
@@ -50,9 +53,6 @@
   }
 
   function initSlider(slider) {
-    if (slider.dataset.pccInited === "1") return;
-    slider.dataset.pccInited = "1";
-
     const viewport = slider.querySelector(".pcc-slider-viewport");
     const track = slider.querySelector(".pcc-slider-track");
     const prev = slider.querySelector(".pcc-prev");
@@ -85,21 +85,19 @@
       { passive: true }
     );
 
+    // Recalc on resize + after fonts/layout settle
     window.addEventListener("resize", function () {
       applyPerView(slider);
       updateButtons(slider);
     });
+
+    setTimeout(function () {
+      applyPerView(slider);
+      updateButtons(slider);
+    }, 250);
   }
 
-  function scan() {
+  document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll(".pcc-events-slider").forEach(initSlider);
-  }
-
-  document.addEventListener("DOMContentLoaded", scan);
-
-  // Divi / dynamic DOM support
-  const mo = new MutationObserver(function () {
-    scan();
   });
-  mo.observe(document.documentElement, { childList: true, subtree: true });
 })();
