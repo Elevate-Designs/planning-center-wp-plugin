@@ -1,17 +1,16 @@
-/* PCC Frontend Base */
+/* PCC Frontend Styles (Events Slider + Calendar) */
 .pcc { box-sizing: border-box; }
 .pcc * { box-sizing: border-box; }
 
-.pcc-empty{
-  padding: 14px 16px;
-  border: 1px solid rgba(0,0,0,.12);
+.pcc-empty {
+  padding: 16px;
   background: rgba(255,255,255,.75);
   border-radius: 14px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,.06);
 }
 
-/* =========================
-   EVENTS SLIDER
-========================= */
+/* ===== Slider ===== */
 .pcc-events-slider {
   position: relative;
   width: 100%;
@@ -27,7 +26,6 @@
   padding: 6px 0;
 }
 
-/* scrollbar */
 .pcc-slider-viewport::-webkit-scrollbar { height: 8px; }
 .pcc-slider-viewport::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 10px; }
 .pcc-slider-viewport { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,.20) transparent; }
@@ -52,7 +50,7 @@
   box-shadow: 0 10px 30px rgba(0,0,0,.08);
 }
 
-.pcc-event-link{
+.pcc-event-card a {
   color: inherit;
   text-decoration: none;
   display: block;
@@ -109,206 +107,271 @@
   font-size: 26px;
   line-height: 1;
   user-select: none;
-  z-index: 2;
 }
+
 .pcc-slider-btn:disabled { opacity: .45; cursor: default; }
+
 .pcc-prev { left: 6px; }
 .pcc-next { right: 6px; }
 
 @media (max-width: 980px) {
+  .pcc-events-slider { --pcc-per-view: 2; }
   .pcc-slider-btn { width: 40px; height: 40px; font-size: 24px; }
 }
+
 @media (max-width: 640px) {
+  .pcc-events-slider { --pcc-per-view: 1; }
   .pcc-slide { min-width: 0; }
   .pcc-prev { left: 2px; }
   .pcc-next { right: 2px; }
 }
 
-/* =========================
-   CALENDAR VIEW (Church Center-like)
-========================= */
-.pcc-cal {
+/* ===== Calendar ===== */
+.pcc-calendar {
   width: 100%;
+}
+
+.pcc-cal-toolbar {
+  margin-bottom: 10px;
+}
+
+.pcc-cal-search {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 10px;
+  padding: 10px 12px;
   background: #fff;
 }
 
-.pcc-cal-header{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  margin: 10px 0 12px;
-}
-
-.pcc-cal-search{
-  flex:1;
-  display:flex;
-  gap:10px;
-  align-items:center;
-  border:1px solid rgba(0,0,0,.15);
-  border-radius: 8px;
-  padding: 10px 12px;
-}
-.pcc-cal-search input{
-  border:0;
-  outline:none;
-  width:100%;
-  font-size:14px;
-}
-.pcc-cal-btn{
-  border:0;
-  background:#111;
-  color:#fff;
-  border-radius: 18px;
-  padding: 8px 14px;
-  cursor:pointer;
-  font-size: 12px;
-}
-.pcc-cal-controls{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  margin: 10px 0 12px;
-}
-.pcc-cal-nav{
-  display:flex;
-  align-items:center;
-  gap:8px;
-}
-.pcc-cal-iconbtn{
-  width:30px;height:30px;
-  border-radius: 8px;
-  border:1px solid rgba(0,0,0,.15);
-  background:#fff;
-  cursor:pointer;
-}
-.pcc-cal-today{
-  border:1px solid rgba(0,0,0,.15);
-  background:#fff;
-  border-radius: 8px;
-  padding: 6px 10px;
-  cursor:pointer;
-  font-size:12px;
-}
-.pcc-cal-title{
-  font-size: 22px;
-  font-weight: 700;
-}
-.pcc-cal-sub{
-  font-size: 12px;
-  opacity:.75;
-  margin-left: 6px;
-  padding: 4px 8px;
-  border:1px solid rgba(0,0,0,.12);
-  border-radius: 999px;
-}
-
-.pcc-grid{
-  border:1px solid rgba(0,0,0,.15);
-  border-radius: 10px;
-  overflow:hidden;
-}
-
-.pcc-grid-head{
-  display:grid;
-  grid-template-columns: repeat(7, 1fr);
-  background: rgba(0,0,0,.03);
-  border-bottom:1px solid rgba(0,0,0,.12);
-}
-.pcc-grid-head div{
-  padding: 10px 10px;
-  font-size: 12px;
-  font-weight: 700;
-  text-align:left;
-}
-
-.pcc-grid-body{
-  display:grid;
-  grid-template-columns: repeat(7, 1fr);
-}
-.pcc-day{
-  min-height: 110px;
-  border-right:1px solid rgba(0,0,0,.10);
-  border-bottom:1px solid rgba(0,0,0,.10);
-  padding: 8px 8px;
-  position:relative;
-}
-.pcc-day:nth-child(7n){ border-right:0; }
-
-.pcc-day-num{
+.pcc-cal-search-icon { opacity: .6; }
+.pcc-cal-search-input {
+  flex: 1;
+  border: 0;
+  outline: 0;
   font-size: 14px;
-  font-weight: 700;
-  opacity:.8;
 }
 
-.pcc-evt{
-  margin-top: 6px;
+.pcc-cal-find-btn,
+.pcc-cal-view-btn {
+  border: 0;
+  background: #111;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 999px;
   font-size: 12px;
-  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.pcc-cal-view-btn {
+  background: #f3f4f6;
+  color: #111;
+}
+
+.pcc-cal-monthnav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.pcc-cal-nav {
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
-  background: rgba(0,0,0,.04);
-  cursor:pointer;
+  border: 1px solid rgba(0,0,0,.12);
+  background: #fff;
+  cursor: pointer;
+}
+
+.pcc-cal-today {
+  border: 1px solid rgba(0,0,0,.12);
+  background: #fff;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.pcc-cal-monthtitle {
+  font-weight: 700;
+  font-size: 22px;
+  margin-right: auto;
+}
+
+.pcc-cal-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(0,0,0,.12);
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  opacity: .9;
+}
+
+.pcc-cal-dow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+  font-size: 12px;
+  letter-spacing: .04em;
+  color: rgba(0,0,0,.55);
+  margin: 8px 0;
+}
+
+.pcc-cal-dow > div {
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.pcc-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.pcc-cal-cell {
+  min-height: 120px;
+  border-right: 1px solid rgba(0,0,0,.10);
+  border-bottom: 1px solid rgba(0,0,0,.10);
+  padding: 10px;
+  position: relative;
+}
+
+.pcc-cal-cell:nth-child(7n) { border-right: 0; }
+
+.pcc-cal-cell.is-out {
+  background: rgba(0,0,0,.02);
+  color: rgba(0,0,0,.45);
+}
+
+.pcc-cal-daynum {
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.pcc-cal-events { display: grid; gap: 6px; }
+
+.pcc-cal-event {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.2;
+  color: #111;
+}
+
+.pcc-cal-event-time {
+  display: block;
+  opacity: .65;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.pcc-cal-event-title {
+  display: block;
+  font-weight: 600;
+}
+
+/* ===== Modal ===== */
+.pcc-modal[hidden] { display: none; }
+.pcc-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+}
+
+.pcc-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+}
+
+.pcc-modal-card {
+  position: relative;
+  width: min(380px, 92vw);
+  margin: 10vh auto;
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,.25);
+}
+
+.pcc-modal-x {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(255,255,255,.95);
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  z-index: 2;
+}
+
+.pcc-modal-imgwrap {
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: rgba(0,0,0,.06);
+}
+
+.pcc-modal-imgwrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pcc-modal-body {
+  padding: 14px 14px 16px;
+}
+
+.pcc-modal-time {
+  font-size: 12px;
+  opacity: .7;
+  margin-bottom: 8px;
+}
+
+.pcc-modal-title {
+  margin: 0 0 8px;
+  font-size: 18px;
   line-height: 1.2;
 }
-.pcc-evt:hover{ background: rgba(0,0,0,.07); }
 
-.pcc-evt-time{
-  display:block;
-  font-size: 11px;
-  opacity:.7;
-  margin-top: 3px;
-}
-
-/* Popup card like screenshot */
-.pcc-pop{
-  position: fixed;
-  z-index: 99999;
-  width: 320px;
-  background:#fff;
-  border-radius: 14px;
-  box-shadow: 0 18px 60px rgba(0,0,0,.22);
-  overflow:hidden;
-  display:none;
-}
-.pcc-pop.open{ display:block; }
-
-.pcc-pop-img{
-  width:100%;
-  aspect-ratio: 16/9;
-  background: rgba(0,0,0,.05);
-}
-.pcc-pop-img img{
-  width:100%;
-  height:100%;
-  object-fit: cover;
-  display:block;
-}
-.pcc-pop-body{ padding: 12px 14px 14px; }
-.pcc-pop-date{ font-size: 12px; opacity:.7; margin: 0 0 8px; }
-.pcc-pop-title{ margin: 0 0 6px; font-size: 16px; font-weight: 800; }
-.pcc-pop-loc{ font-size: 12px; opacity:.8; margin: 0 0 10px; }
-.pcc-pop-desc{ font-size: 12px; opacity:.85; margin: 0 0 12px; }
-.pcc-pop-actions{
-  display:flex;
-  gap:10px;
-}
-.pcc-pop-actions a{
-  flex:1;
-  display:inline-flex;
-  justify-content:center;
-  align-items:center;
-  padding: 10px 12px;
-  border-radius: 999px;
-  background:#111;
-  color:#fff;
-  text-decoration:none;
+.pcc-modal-loc {
   font-size: 12px;
+  opacity: .75;
+  margin-bottom: 10px;
 }
-.pcc-pop-close{
-  position:absolute;
-  top:10px; right:10px;
-  width:28px; height:28px;
+
+.pcc-modal-desc {
+  font-size: 13px;
+  opacity: .92;
+  margin-bottom: 14px;
+  white-space: pre-wrap;
+}
+
+.pcc-modal-btn {
+  display: block;
+  text-align: center;
   border-radius: 999px;
-  border:0;
-  background: rgba(255,255,255,.85);
-  cursor:pointer;
+  padding: 12px 14px;
+  background: #111;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
 }
+
+body.pcc-modal-open { overflow: hidden; }
