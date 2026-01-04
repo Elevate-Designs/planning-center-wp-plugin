@@ -285,55 +285,85 @@ final class PCC_Data {
     private function normalize_groups_response($resp, $public_only) {
         $public_only = (bool)$public_only;
 
-        if (!is_array($resp)) {
-            return array();
+        $data     = isset($resp['data']) && is_array($resp['data']) ? $resp['data'] : [];
+        $included = isset($resp['included']) && is_array($resp['included']) ? $resp['included'] : [];
+
+        // Map included photos by id
+        $photos_by_id = [];
+        foreach ($included as $inc) {
+            if (
+                is_array($inc)
+                && ($inc['type'] ?? '') === 'Photo'
+                && !empty($inc['id'])
+                && !empty($inc['attributes']['url'])
+            ) {
+                $photos_by_id[(string)$inc['id']] = (string)$inc['attributes']['url'];
+            }
         }
 
-        $data = (isset($resp['data']) && is_array($resp['data'])) ? $resp['data'] : array();
-        $out = array();
+        $out = [];
 
         foreach ($data as $row) {
-            if (!is_array($row)) { continue; }
+            if (!is_array($row)) continue;
 
-            $id = isset($row['id']) ? (string)$row['id'] : '';
-            $attrs = (isset($row['attributes']) && is_array($row['attributes'])) ? $row['attributes'] : array();
+            $attrs = $row['attributes'] ?? [];
+            if (!is_array($attrs)) continue;
 
             if ($public_only && !$this->is_group_public($attrs)) {
                 continue;
             }
 
-            $title = $this->first_non_empty($attrs, array('name', 'title'), '');
-            $description = $this->first_non_empty($attrs, array('description', 'public_description', 'summary'), '');
+            $title = $this->first_non_empty($attrs, ['name', 'title'], '');
+            $description = $this->first_non_empty($attrs, ['description', 'public_description', 'summary'], '');
 
-            $image_url = $this->first_non_empty($attrs, array(
-                'image_url','photo_url','avatar_url','cover_image_url','header_image_url','logo_url','thumbnail_url'
-            ), '');
+            // Resolve image from relationship.photo
+            $image_url = '';
 
-            $url = $this->first_non_empty($attrs, array(
+            if (
+                isset($row['relationships']['photo']['data']['id'])
+            ) {
+                $photo_id = (string)$row['relationships']['photo']['data']['id'];
+                if (isset($photos_by_id[$photo_id])) {
+                    $image_url = $photos_by_id[$photo_id];
+                }
+            }
+
+            // Fallback (older / edge cases)
+            if ($image_url === '') {
+                $image_url = $this->first_non_empty($attrs, [
+                    'image_url',
+                    'photo_url',
+                    'avatar_url',
+                    'cover_image_url',
+                    'header_image_url',
+                ], '');
+            }
+
+            $url = $this->first_non_empty($attrs, [
                 'public_church_center_web_url',
                 'public_church_center_url',
                 'church_center_web_url',
                 'church_center_url',
                 'public_url',
                 'url',
-                'web_url',
-            ), '');
+            ], '');
 
             if ($public_only && $url === '' && $title !== '') {
                 continue;
             }
 
-            $out[] = array(
-                'group_id'    => $id,
+            $out[] = [
+                'group_id'    => (string)($row['id'] ?? ''),
                 'title'       => $title,
                 'description' => $description,
                 'image_url'   => $image_url,
                 'url'         => $url,
-            );
+            ];
         }
 
         return $out;
     }
+
 
     private function normalize_sermons_response($resp, $public_only) {
         $public_only = (bool)$public_only;
