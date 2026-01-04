@@ -13,7 +13,6 @@
   }
 
   function monthLabel(year, month) {
-    // month: 1..12
     try {
       const dt = new Date(year, month - 1, 1);
       return dt.toLocaleDateString(undefined, { month: "long", year: "numeric" });
@@ -30,7 +29,6 @@
   }
 
   function clampMonthYear(year, month) {
-    // month: 1..12
     let y = year, m = month;
     while (m < 1) { m += 12; y -= 1; }
     while (m > 12) { m -= 12; y += 1; }
@@ -47,7 +45,7 @@
     const cfg = window.pccCalendar || {};
     const ajaxUrl = cfg.ajaxUrl || (window.ajaxurl || "/wp-admin/admin-ajax.php");
     const nonce = cfg.nonce || "";
-    const startOfWeek = typeof cfg.startOfWeek === "number" ? cfg.startOfWeek : 0; // 0 Sunday
+    const startOfWeek = typeof cfg.startOfWeek === "number" ? cfg.startOfWeek : 0;
 
     let year = parseInt(root.getAttribute("data-initial-year") || "0", 10);
     let month = parseInt(root.getAttribute("data-initial-month") || "0", 10);
@@ -79,7 +77,9 @@
       for (let i = 1; i <= 12; i++) {
         const opt = document.createElement("option");
         opt.value = String(i);
-        opt.textContent = monthLabel(year, i).replace(String(year), "").trim() || new Date(year, i - 1, 1).toLocaleDateString(undefined, { month: "long" });
+        opt.textContent =
+          monthLabel(year, i).replace(String(year), "").trim() ||
+          new Date(year, i - 1, 1).toLocaleDateString(undefined, { month: "long" });
         if (i === month) opt.selected = true;
         monthSelect.appendChild(opt);
       }
@@ -94,6 +94,20 @@
       if (!popoverEl) return;
       popoverEl.hidden = true;
       popoverEl.innerHTML = "";
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;",
+      }[c]));
+    }
+
+    function escapeAttr(s) {
+      return String(s).replace(/"/g, "&quot;");
     }
 
     function openPopover(anchorEl, item) {
@@ -126,7 +140,6 @@
         </div>
       `;
 
-      // Position near anchor
       const r = anchorEl.getBoundingClientRect();
       const pr = root.getBoundingClientRect();
 
@@ -138,20 +151,6 @@
       popoverEl.hidden = false;
     }
 
-    function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, (c) => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#039;",
-      }[c]));
-    }
-
-    function escapeAttr(s) {
-      return String(s).replace(/"/g, "&quot;");
-    }
-
     function groupItemsByDate(list) {
       const map = new Map();
       list.forEach((it) => {
@@ -160,7 +159,6 @@
         if (!map.has(d)) map.set(d, []);
         map.get(d).push(it);
       });
-      // Sort items per day by starts_at
       for (const [k, arr] of map.entries()) {
         arr.sort((a, b) => String(a.starts_at || "").localeCompare(String(b.starts_at || "")));
         map.set(k, arr);
@@ -174,7 +172,6 @@
       closePopover();
       setHeaderLabel();
 
-      // Filter by search
       const filtered = searchTerm
         ? items.filter((it) => (it.title || "").toLowerCase().includes(searchTerm.toLowerCase()))
         : items;
@@ -183,10 +180,10 @@
 
       const first = new Date(year, month - 1, 1);
       const daysInMonth = new Date(year, month, 0).getDate();
-      const firstDow = first.getDay(); // 0..6
+      const firstDow = first.getDay();
       const offset = (firstDow - startOfWeek + 7) % 7;
 
-      const totalCells = 42; // 6 weeks
+      const totalCells = 42;
       const startDayNumber = 1 - offset;
 
       const dowNames = [];
@@ -196,7 +193,10 @@
         dowNames.push(tmp.toLocaleDateString(undefined, { weekday: "short" }));
       }
 
-      let html = `<div class="pcc-cal-dow">` + dowNames.map((n) => `<div class="pcc-cal-dowcell">${escapeHtml(n)}</div>`).join("") + `</div>`;
+      let html = `<div class="pcc-cal-dow">` +
+        dowNames.map((n) => `<div class="pcc-cal-dowcell">${escapeHtml(n)}</div>`).join("") +
+        `</div>`;
+
       html += `<div class="pcc-cal-cells">`;
 
       for (let i = 0; i < totalCells; i++) {
@@ -232,22 +232,20 @@
       }
 
       html += `</div>`;
-
       gridEl.innerHTML = html;
 
-      // Bind event clicks (popover)
       gridEl.querySelectorAll(".pcc-cal-ev").forEach((btn) => {
         btn.addEventListener("click", () => {
           const key = btn.getAttribute("data-key");
-          const item = items.find((x) => String(x.instance_id || "") === String(key)) ||
-                       items.find((x) => String(x.event_id || "") === String(key)) ||
-                       null;
+          const item =
+            items.find((x) => String(x.instance_id || "") === String(key)) ||
+            items.find((x) => String(x.event_id || "") === String(key)) ||
+            null;
           if (!item) return;
           openPopover(btn, item);
         });
       });
 
-      // “more” shows simple alert list (can be upgraded to modal later)
       gridEl.querySelectorAll(".pcc-cal-more").forEach((btn) => {
         btn.addEventListener("click", () => {
           const d = btn.getAttribute("data-date") || "";
@@ -293,9 +291,7 @@
         })
         .catch((err) => {
           console.error(err);
-          if (gridEl) {
-            gridEl.innerHTML = `<div class="pcc-cal-error">Failed to load events.</div>`;
-          }
+          if (gridEl) gridEl.innerHTML = `<div class="pcc-cal-error">Failed to load events.</div>`;
         })
         .finally(() => setLoading(false));
     }
@@ -319,7 +315,6 @@
       fetchMonth();
     }
 
-    // Header controls
     if (prevBtn) prevBtn.addEventListener("click", goPrev);
     if (nextBtn) nextBtn.addEventListener("click", goNext);
     if (todayBtn) todayBtn.addEventListener("click", goToday);
@@ -340,20 +335,17 @@
         render();
       });
     }
+
     if (searchBtn && searchInput) {
-      searchBtn.addEventListener("click", () => {
-        searchInput.focus();
-      });
+      searchBtn.addEventListener("click", () => searchInput.focus());
     }
 
-    // Close popover on outside click
     document.addEventListener("click", (e) => {
       if (!popoverEl || popoverEl.hidden) return;
       if (root.contains(e.target) && (popoverEl.contains(e.target) || e.target.classList.contains("pcc-cal-ev"))) return;
       closePopover();
     });
 
-    // Initial load
     fetchMonth();
   }
 

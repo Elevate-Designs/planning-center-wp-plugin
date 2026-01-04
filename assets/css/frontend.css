@@ -31,7 +31,7 @@
 .pcc-slide {
   scroll-snap-align: start;
   flex: 0 0 calc((100% - (var(--pcc-gap) * (var(--pcc-per-view) - 1))) / var(--pcc-per-view));
-  min-width: 240px; /* prevents super tiny cards */
+  min-width: 240px;
 }
 
 .pcc-event-card {
@@ -76,6 +76,10 @@
   font-size: 14px;
   opacity: .75;
   margin: 0 0 10px;
+}
+
+.pcc-event-loc {
+  opacity: .85;
 }
 
 .pcc-event-desc {

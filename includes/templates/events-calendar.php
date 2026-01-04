@@ -15,6 +15,8 @@ $show_search = !empty($show_search);
 $month_label = function_exists('wp_date')
   ? wp_date('F Y', strtotime(sprintf('%04d-%02d-01', $year, $month)))
   : date('F Y', strtotime(sprintf('%04d-%02d-01', $year, $month)));
+
+$search_id = 'pcc-cal-search-' . esc_attr($year . '-' . $month . '-' . wp_rand(10, 9999));
 ?>
 <div class="pcc pcc-calendar"
      data-initial-year="<?php echo esc_attr($year); ?>"
@@ -26,10 +28,10 @@ $month_label = function_exists('wp_date')
 
     <?php if ($show_search): ?>
       <div class="pcc-calendar-search">
-        <label class="screen-reader-text" for="pcc-cal-search-<?php echo esc_attr($year . '-' . $month . '-' . wp_rand(10, 9999)); ?>">
+        <label class="screen-reader-text" for="<?php echo $search_id; ?>">
           <?php echo esc_html__('Search events', 'pcc'); ?>
         </label>
-        <input class="pcc-cal-search" type="search" placeholder="<?php echo esc_attr__('Search for events...', 'pcc'); ?>">
+        <input id="<?php echo $search_id; ?>" class="pcc-cal-search" type="search" placeholder="<?php echo esc_attr__('Search for events...', 'pcc'); ?>">
         <button class="pcc-cal-search-btn" type="button"><?php echo esc_html__('Find Events', 'pcc'); ?></button>
       </div>
     <?php endif; ?>

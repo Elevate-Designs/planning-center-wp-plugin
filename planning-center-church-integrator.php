@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Planning Center Church Integrator
  * Description: Pull Events (Calendar), Sermons (Publishing Episodes), and Groups from Planning Center and display them on your WordPress site via shortcodes.
- * Version: 1.0.28
+ * Version: 1.0.29
  * Author: Sagitarisandy
  * Text Domain: pcc
  * Requires at least: 6.0
@@ -19,7 +19,7 @@ if (!defined('ABSPATH')) {
  * =====================================================
  */
 if (!defined('PCC_VERSION')) {
-    define('PCC_VERSION', '1.0.28');
+    define('PCC_VERSION', '1.0.29');
 }
 if (!defined('PCC_PLUGIN_FILE')) {
     define('PCC_PLUGIN_FILE', __FILE__);
@@ -82,7 +82,6 @@ if (!function_exists('pcc')) {
 }
 
 add_action('plugins_loaded', function () {
-    // Ensure everything is loaded before init.
     pcc();
 }, 5);
 
@@ -102,7 +101,6 @@ if (file_exists($updaterPath)) {
             'planning-center-church-integrator'
         );
 
-        // Use GitHub Releases assets if present.
         if (method_exists($updateChecker, 'getVcsApi')) {
             $updateChecker->getVcsApi()->enableReleaseAssets();
         }
