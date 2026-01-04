@@ -134,6 +134,75 @@ final class PCC_Admin {
         echo '</form>';
 
         echo '</div>';
+
+        echo '<hr />';
+
+        echo '<h2>' . esc_html__('Shortcodes & Usage', 'pcc') . '</h2>';
+
+        echo '<p>' . esc_html__(
+            'Use the following shortcodes to display Planning Center content anywhere on your site (Pages, Posts, or Page Builder text modules).',
+            'pcc'
+        ) . '</p>';
+
+        /**
+         * EVENTS SLIDER
+         */
+        echo '<h3>' . esc_html__('1) Events Slider', 'pcc') . '</h3>';
+
+        echo '<p>' . esc_html__(
+            'Displays upcoming events in a horizontal slider layout.',
+            'pcc'
+        ) . '</p>';
+
+        echo '<pre><code>[pcc_events_slider]</code></pre>';
+
+        echo '<p><strong>' . esc_html__('Example:', 'pcc') . '</strong></p>';
+
+        echo '<pre><code>[pcc_events_slider limit="12" per_view="3" months_ahead="2" public_only="1"]</code></pre>';
+
+        echo '<p><strong>' . esc_html__('Attributes:', 'pcc') . '</strong></p>';
+
+        echo '<ul style="list-style: disc; padding-left: 20px;">';
+        echo '<li><strong>limit</strong> – Maximum number of events to display (default: 12)</li>';
+        echo '<li><strong>per_view</strong> – Number of event cards visible at once (default: 3)</li>';
+        echo '<li><strong>months_ahead</strong> – How many months ahead to load events (default: 2)</li>';
+        echo '<li><strong>public_only</strong> – Show only public/published events (1 = yes, 0 = no)</li>';
+        echo '</ul>';
+
+        echo '<p><em>' . esc_html__(
+            'Backward compatibility: the legacy shortcode [pcc_events] works the same as [pcc_events_slider].',
+            'pcc'
+        ) . '</em></p>';
+
+        /**
+         * EVENTS CALENDAR
+         */
+        echo '<h3>' . esc_html__('2) Events Calendar', 'pcc') . '</h3>';
+
+        echo '<p>' . esc_html__(
+            'Displays a full month-view calendar with events.',
+            'pcc'
+        ) . '</p>';
+
+        echo '<pre><code>[pcc_events_calendar]</code></pre>';
+
+        echo '<p><strong>' . esc_html__('Example:', 'pcc') . '</strong></p>';
+
+        echo '<pre><code>[pcc_events_calendar month="2026-01" public_only="1" show_search="1"]</code></pre>';
+
+        echo '<p><strong>' . esc_html__('Attributes:', 'pcc') . '</strong></p>';
+
+        echo '<ul style="list-style: disc; padding-left: 20px;">';
+        echo '<li><strong>month</strong> – Initial month to display (format: YYYY-MM)</li>';
+        echo '<li><strong>public_only</strong> – Show only public/published events (1 = yes, 0 = no)</li>';
+        echo '<li><strong>show_search</strong> – Show or hide the search bar (1 = show, 0 = hide)</li>';
+        echo '</ul>';
+
+        echo '<p><em>' . esc_html__(
+            'Tip: When using a page builder like Divi, place the shortcode inside a Text or Code module.',
+            'pcc'
+        ) . '</em></p>';
+
     }
 
     public static function handle_refresh_cache() {
