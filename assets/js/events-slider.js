@@ -14,10 +14,7 @@
 
   function computePerView(slider) {
     const wanted = parseInt(slider.dataset.perView || "3", 10) || 3;
-
-    // ✅ pakai container width (Divi kadang beda dari window width)
-    const rect = slider.getBoundingClientRect();
-    const w = rect.width || window.innerWidth || 1024;
+    const w = window.innerWidth || document.documentElement.clientWidth || 1024;
 
     if (w <= 640) return 1;
     if (w <= 980) return Math.min(2, wanted);
@@ -85,16 +82,10 @@
       { passive: true }
     );
 
-    // Recalc on resize + after fonts/layout settle
     window.addEventListener("resize", function () {
       applyPerView(slider);
       updateButtons(slider);
     });
-
-    setTimeout(function () {
-      applyPerView(slider);
-      updateButtons(slider);
-    }, 250);
   }
 
   document.addEventListener("DOMContentLoaded", function () {
