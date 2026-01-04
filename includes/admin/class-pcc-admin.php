@@ -203,6 +203,31 @@ final class PCC_Admin {
             'pcc'
         ) . '</em></p>';
 
+        // Shortcodes usage groups & sermons
+        echo '<hr />';
+        echo '<h2>' . esc_html__('Shortcodes', 'pcc') . '</h2>';
+        echo '<p>' . esc_html__('Use these shortcodes in any Page / Post / Builder module (Divi, Elementor, Gutenberg).', 'pcc') . '</p>';
+
+        echo '<ul style="list-style: disc; padding-left: 20px;">';
+
+        echo '<li><strong>[pcc_events_slider]</strong> — ' . esc_html__('Events slider.', 'pcc') . '<br/>';
+        echo '<code>[pcc_events_slider]</code><br/>';
+        echo '<code>[pcc_events_slider limit="12" per_view="3" months_ahead="2" public_only="1"]</code><br/>';
+        echo '<em>' . esc_html__('Legacy alias still works:', 'pcc') . '</em> <code>[pcc_events]</code></li>';
+
+        echo '<li style="margin-top:10px;"><strong>[pcc_events_calendar]</strong> — ' . esc_html__('Events calendar view.', 'pcc') . '<br/>';
+        echo '<code>[pcc_events_calendar]</code><br/>';
+        echo '<code>[pcc_events_calendar month="2026-01" public_only="1" show_search="1"]</code></li>';
+
+        echo '<li style="margin-top:10px;"><strong>[pcc_groups]</strong> — ' . esc_html__('Groups list.', 'pcc') . '<br/>';
+        echo '<code>[pcc_groups]</code><br/>';
+        echo '<code>[pcc_groups limit="50" public_only="1"]</code></li>';
+
+        echo '<li style="margin-top:10px;"><strong>[pcc_sermons]</strong> — ' . esc_html__('Sermons (Publishing Episodes) list.', 'pcc') . '<br/>';
+        echo '<code>[pcc_sermons]</code><br/>';
+        echo '<code>[pcc_sermons limit="12" public_only="1"]</code></li>';
+
+        echo '</ul>';
     }
 
     public static function handle_refresh_cache() {
