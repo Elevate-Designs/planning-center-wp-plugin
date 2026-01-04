@@ -2,20 +2,27 @@
 if (!defined('ABSPATH')) { exit; }
 /** @var array $items */
 
-$placeholder = defined('PCC_PLUGIN_URL')
-  ? PCC_PLUGIN_URL . 'assets/img/pcc-placeholder.svg'
-  : '';
+function pcc_initials($title) {
+  $title = trim((string)$title);
+  if ($title === '') return '';
+  $words = preg_split('/\s+/', $title);
+  $ini = '';
+  foreach ($words as $w) {
+    if ($w === '') continue;
+    $ini .= mb_strtoupper(mb_substr($w, 0, 1));
+    if (mb_strlen($ini) >= 2) break;
+  }
+  return $ini;
+}
 ?>
 <div class="pcc pcc-sermons">
   <div class="pcc-cards">
-    <?php foreach ($items as $it) :
+    <?php foreach ((array)$items as $it) :
       $title = isset($it['title']) ? (string)$it['title'] : '';
       $url   = isset($it['url']) ? (string)$it['url'] : '';
       $desc  = isset($it['description']) ? (string)$it['description'] : '';
       $img   = isset($it['image_url']) ? (string)$it['image_url'] : '';
       $pub   = isset($it['published_at']) ? (string)$it['published_at'] : '';
-
-      if ($img === '') { $img = $placeholder; }
 
       $desc_clean = wp_strip_all_tags($desc);
       if (function_exists('mb_strlen') && function_exists('mb_substr')) {
@@ -26,28 +33,36 @@ $placeholder = defined('PCC_PLUGIN_URL')
 
       $date_str = '';
       $ts = $pub ? strtotime($pub) : 0;
-      if ($ts) {
-        $date_str = wp_date(get_option('date_format'), $ts);
-      }
+      if ($ts) $date_str = wp_date(get_option('date_format'), $ts);
+
+      $img_ok = ($img && filter_var($img, FILTER_VALIDATE_URL));
+      $ini = pcc_initials($title);
     ?>
-      <article class="pcc-event-card pcc-card">
+      <article class="pcc-card pcc-event-card">
         <?php if ($url) : ?><a href="<?php echo esc_url($url); ?>"><?php endif; ?>
+
           <div class="pcc-event-thumb">
-            <?php if ($img) : ?>
+            <?php if ($img_ok) : ?>
               <img loading="lazy" src="<?php echo esc_url($img); ?>" alt="<?php echo esc_attr($title); ?>">
+            <?php else : ?>
+              <div class="pcc-thumb-fallback" aria-hidden="true"><?php echo esc_html($ini); ?></div>
             <?php endif; ?>
           </div>
+
           <div class="pcc-event-body">
             <h3 class="pcc-event-title"><?php echo esc_html($title); ?></h3>
+
             <?php if ($date_str) : ?>
               <div class="pcc-event-meta">
                 <span class="pcc-event-date"><?php echo esc_html($date_str); ?></span>
               </div>
             <?php endif; ?>
+
             <?php if ($desc_clean) : ?>
               <p class="pcc-event-desc"><?php echo esc_html($desc_clean); ?></p>
             <?php endif; ?>
           </div>
+
         <?php if ($url) : ?></a><?php endif; ?>
       </article>
     <?php endforeach; ?>

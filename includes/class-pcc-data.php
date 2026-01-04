@@ -254,7 +254,7 @@ final class PCC_Data {
             $description = $this->first_non_empty($event_attrs, array('description', 'summary', 'details'), '');
             $location    = $this->first_non_empty($event_attrs, array('location', 'event_location', 'address'), '');
 
-            $image_url = $this->first_non_empty($event_attrs, array('image_url', 'logo_url'), '');
+            $image_url = $this->pick_image_url($attrs);
             $url = $this->first_non_empty($event_attrs, array('church_center_url', 'public_url', 'url', 'website_url'), '');
 
             $date_key = '';
@@ -396,6 +396,32 @@ final class PCC_Data {
         }
         return $default;
     }
+
+    private function pick_image_url($attrs) {
+    if (!is_array($attrs)) return '';
+
+    // 1) string fields
+    $url = $this->first_non_empty($attrs, array(
+        'image_url','photo_url','avatar_url','thumbnail_url',
+        'cover_image_url','header_image_url','artwork_url','poster_url'
+    ), '');
+    if ($url !== '') return $url;
+
+    // 2) nested objects (mis: avatar => ['url'=>...])
+    $nested_keys = array('avatar','photo','image','artwork','cover_image','header_image');
+    foreach ($nested_keys as $k) {
+        if (isset($attrs[$k]) && is_array($attrs[$k])) {
+            foreach (array('url','original','src','href','image_url','thumbnail_url') as $nk) {
+                if (!empty($attrs[$k][$nk]) && is_string($attrs[$k][$nk])) {
+                    return (string)$attrs[$k][$nk];
+                }
+            }
+        }
+    }
+
+    return '';
+}
+
 
     private function is_event_public($event_attrs) {
         if (!is_array($event_attrs) || empty($event_attrs)) {
