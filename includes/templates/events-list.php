@@ -22,25 +22,31 @@ $placeholder = defined('PCC_PLUGIN_URL')
           $ends   = isset($it['ends_at']) ? (string)$it['ends_at'] : '';
           $desc   = isset($it['description']) ? (string)$it['description'] : '';
           $img    = isset($it['image_url']) ? (string)$it['image_url'] : '';
+          $loc    = isset($it['location']) ? (string)$it['location'] : '';
 
           if ($img === '') {
             $img = $placeholder;
           }
 
-          // Date formatting (local WP timezone)
           $date_str = '';
           $start_ts = $starts ? strtotime($starts) : 0;
           $end_ts   = $ends ? strtotime($ends) : 0;
           if ($start_ts) {
-            $date_str = wp_date(get_option('date_format') . ' ' . get_option('time_format'), $start_ts);
+            $date_str = wp_date(get_option('date_format'), $start_ts) . ' • ' . wp_date(get_option('time_format'), $start_ts);
             if ($end_ts) {
               $date_str .= ' — ' . wp_date(get_option('time_format'), $end_ts);
             }
           }
 
           $desc_clean = wp_strip_all_tags($desc);
-          if (mb_strlen($desc_clean) > 140) {
-            $desc_clean = mb_substr($desc_clean, 0, 140) . '…';
+          if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+            if (mb_strlen($desc_clean) > 140) {
+              $desc_clean = mb_substr($desc_clean, 0, 140) . '…';
+            }
+          } else {
+            if (strlen($desc_clean) > 140) {
+              $desc_clean = substr($desc_clean, 0, 140) . '…';
+            }
           }
         ?>
           <div class="pcc-slide">
@@ -53,9 +59,16 @@ $placeholder = defined('PCC_PLUGIN_URL')
                 </div>
                 <div class="pcc-event-body">
                   <h3 class="pcc-event-title"><?php echo esc_html($title); ?></h3>
+
                   <?php if ($date_str) : ?>
-                    <p class="pcc-event-meta"><?php echo esc_html($date_str); ?></p>
+                    <div class="pcc-event-meta">
+                      <span class="pcc-event-date"><?php echo esc_html($date_str); ?></span>
+                      <?php if ($loc) : ?>
+                        <span class="pcc-event-loc">• <?php echo esc_html($loc); ?></span>
+                      <?php endif; ?>
+                    </div>
                   <?php endif; ?>
+
                   <?php if ($desc_clean) : ?>
                     <p class="pcc-event-desc"><?php echo esc_html($desc_clean); ?></p>
                   <?php endif; ?>
