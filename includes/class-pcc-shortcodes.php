@@ -8,10 +8,34 @@ if (!class_exists('PCC_Shortcodes')):
 
 final class PCC_Shortcodes {
 
+    /** @var PCC_Shortcodes|null */
+    private static $instance = null;
+
     /** @var PCC_Data */
     private $data;
 
-    public function __construct($data) {
+    /**
+     * Dipanggil oleh PCC_Plugin saat init.
+     * Supaya tidak crash di PHP 8+ (karena callback static harus valid)
+     */
+    public static function register($data = null) {
+        if (self::$instance) {
+            return;
+        }
+
+        if ($data === null) {
+            $plugin = function_exists('pcc') ? pcc() : null;
+            $data = ($plugin && isset($plugin->data)) ? $plugin->data : null;
+        }
+
+        if (!$data || !is_object($data)) {
+            return;
+        }
+
+        self::$instance = new self($data);
+    }
+
+    private function __construct($data) {
         $this->data = $data;
 
         // Backward compatible alias
@@ -30,17 +54,20 @@ final class PCC_Shortcodes {
         add_action('wp_ajax_nopriv_pcc_get_events_month', array($this, 'ajax_get_events_month'));
     }
 
+    private function render_error($message) {
+        return '<p class="pcc-error">' . esc_html($message) . '</p>';
+    }
+
     /**
      * Slider shortcode
      * Usage: [pcc_events_slider limit="12" per_view="3" months_ahead="2" public_only="1"]
-     * (Also works with [pcc_events ...])
      */
     public function events_slider_shortcode($atts = array()) {
         $atts = shortcode_atts(array(
-            'limit'       => 12,
-            'per_view'    => 3,
-            'months_ahead'=> 2,
-            'public_only' => 1,
+            'limit'        => 12,
+            'per_view'     => 3,
+            'months_ahead' => 2,
+            'public_only'  => 1,
         ), $atts, 'pcc_events_slider');
 
         $limit        = max(1, min(50, (int)$atts['limit']));
@@ -52,7 +79,19 @@ final class PCC_Shortcodes {
         $start = new DateTimeImmutable('now', $tz);
         $end   = $start->modify('+' . $months_ahead . ' months');
 
+        if (!method_exists($this->data, 'get_event_instances_in_range')) {
+            return $this->render_error('PCC_Data::get_event_instances_in_range() not found.');
+        }
+
         $items = $this->data->get_event_instances_in_range($start, $end, $public_only);
+
+        if (is_wp_error($items)) {
+            return $this->render_error($items->get_error_message());
+        }
+        if (!is_array($items)) {
+            $items = array();
+        }
+
         if (count($items) > $limit) {
             $items = array_slice($items, 0, $limit);
         }
@@ -68,7 +107,7 @@ final class PCC_Shortcodes {
             $atts['per_view'] = $per_view;
             include $template;
         } else {
-            echo '<p>' . esc_html__('Template not found: events-list.php', 'pcc') . '</p>';
+            echo $this->render_error('Template not found: events-list.php');
         }
         return ob_get_clean();
     }
@@ -79,7 +118,7 @@ final class PCC_Shortcodes {
      */
     public function events_calendar_shortcode($atts = array()) {
         $atts = shortcode_atts(array(
-            'month'       => '',   // "YYYY-MM" (optional)
+            'month'       => '',
             'public_only' => 1,
             'show_search' => 1,
         ), $atts, 'pcc_events_calendar');
@@ -87,7 +126,6 @@ final class PCC_Shortcodes {
         $public_only = !empty($atts['public_only']);
         $show_search = !empty($atts['show_search']);
 
-        // Determine initial month
         $tz = function_exists('wp_timezone') ? wp_timezone() : new DateTimeZone('UTC');
         $now = new DateTimeImmutable('now', $tz);
 
@@ -103,7 +141,6 @@ final class PCC_Shortcodes {
             }
         }
 
-        // Enqueue calendar assets (registered by PCC_Plugin)
         if (function_exists('wp_enqueue_script')) {
             wp_enqueue_script('pcc-events-calendar');
         }
@@ -123,7 +160,7 @@ final class PCC_Shortcodes {
             extract($vars, EXTR_SKIP);
             include $template;
         } else {
-            echo '<p>' . esc_html__('Template not found: events-calendar.php', 'pcc') . '</p>';
+            echo $this->render_error('Template not found: events-calendar.php');
         }
 
         return ob_get_clean();
@@ -142,14 +179,25 @@ final class PCC_Shortcodes {
         $limit = max(1, min(200, (int)$atts['limit']));
         $public_only = !empty($atts['public_only']);
 
+        if (!method_exists($this->data, 'get_groups')) {
+            return $this->render_error('PCC_Data::get_groups() not found. Add it in class-pcc-data.php');
+        }
+
         $items = $this->data->get_groups($limit, $public_only);
+
+        if (is_wp_error($items)) {
+            return $this->render_error($items->get_error_message());
+        }
+        if (!is_array($items)) {
+            $items = array();
+        }
 
         ob_start();
         $template = defined('PCC_PLUGIN_DIR') ? PCC_PLUGIN_DIR . 'includes/templates/groups-list.php' : '';
         if ($template && file_exists($template)) {
             include $template;
         } else {
-            echo '<p>' . esc_html__('Template not found: groups-list.php', 'pcc') . '</p>';
+            echo $this->render_error('Template not found: groups-list.php');
         }
         return ob_get_clean();
     }
@@ -167,21 +215,31 @@ final class PCC_Shortcodes {
         $limit = max(1, min(200, (int)$atts['limit']));
         $public_only = !empty($atts['public_only']);
 
+        if (!method_exists($this->data, 'get_sermons')) {
+            return $this->render_error('PCC_Data::get_sermons() not found. Add it in class-pcc-data.php');
+        }
+
         $items = $this->data->get_sermons($limit, $public_only);
+
+        if (is_wp_error($items)) {
+            return $this->render_error($items->get_error_message());
+        }
+        if (!is_array($items)) {
+            $items = array();
+        }
 
         ob_start();
         $template = defined('PCC_PLUGIN_DIR') ? PCC_PLUGIN_DIR . 'includes/templates/sermons-list.php' : '';
         if ($template && file_exists($template)) {
             include $template;
         } else {
-            echo '<p>' . esc_html__('Template not found: sermons-list.php', 'pcc') . '</p>';
+            echo $this->render_error('Template not found: sermons-list.php');
         }
         return ob_get_clean();
     }
 
     /**
      * AJAX: return month instances
-     * POST: action=pcc_get_events_month&nonce=...&year=2026&month=1&public_only=1
      */
     public function ajax_get_events_month() {
         $nonce = isset($_REQUEST['nonce']) ? sanitize_text_field(wp_unslash($_REQUEST['nonce'])) : '';
@@ -197,7 +255,18 @@ final class PCC_Shortcodes {
             wp_send_json_error(array('message' => 'Invalid year/month'), 400);
         }
 
+        if (!method_exists($this->data, 'get_event_instances_for_month')) {
+            wp_send_json_error(array('message' => 'PCC_Data::get_event_instances_for_month() not found'), 500);
+        }
+
         $items = $this->data->get_event_instances_for_month($year, $month, $public_only);
+
+        if (is_wp_error($items)) {
+            wp_send_json_error(array('message' => $items->get_error_message()), 500);
+        }
+        if (!is_array($items)) {
+            $items = array();
+        }
 
         wp_send_json_success(array(
             'year'  => $year,

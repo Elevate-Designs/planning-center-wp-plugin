@@ -109,18 +109,18 @@ final class PCC_Admin {
         echo '<h2>' . esc_html__('Connection', 'pcc') . '</h2>';
         $plugin = function_exists('pcc') ? pcc() : null;
 
-        if (!$plugin || !isset($plugin->api) || !$plugin->api->has_credentials()) {
-            echo '<p><strong>' . esc_html__('Status:', 'pcc') . '</strong> <span style="color:#b32d2e">' . esc_html__('Not configured', 'pcc') . '</span></p>';
-            echo '<p>' . esc_html__('Please save your Application ID and Secret first.', 'pcc') . '</p>';
+        if (!isset($plugin->data) || !is_object($plugin->data) || !method_exists($plugin->data, 'get_events')) {
+            echo '<p><strong>' . esc_html__('Status:', 'pcc') . '</strong> <span style="color:#b32d2e">' . esc_html__('Error', 'pcc') . '</span></p>';
+            echo '<p>' . esc_html__('PCC_Data service is not available.', 'pcc') . '</p>';
         } else {
             $probe = $plugin->data->get_events(false, 1);
             if (is_wp_error($probe)) {
-                echo '<p><strong>' . esc_html__('Status:', 'pcc') . '</strong> <span style="color:#b32d2e">' . esc_html__('Error', 'pcc') . '</span></p>';
-                echo '<p>' . esc_html($probe->get_error_message()) . '</p>';
+            echo '<p><strong>' . esc_html__('Status:', 'pcc') . '</strong> <span style="color:#b32d2e">' . esc_html__('Error', 'pcc') . '</span></p>';
+            echo '<p>' . esc_html($probe->get_error_message()) . '</p>';
             } else {
-                echo '<p><strong>' . esc_html__('Status:', 'pcc') . '</strong> <span style="color: #00a32a">' . esc_html__('Connected', 'pcc') . '</span></p>';
-                $count = (!empty($probe['data']) && is_array($probe['data'])) ? count($probe['data']) : 0;
-                echo '<p>' . sprintf(esc_html__('API reachable. Sample events returned: %d', 'pcc'), (int)$count) . '</p>';
+            $count = is_array($probe) ? count($probe) : 0;
+            echo '<p><strong>' . esc_html__('Status:', 'pcc') . '</strong> <span style="color: #00a32a">' . esc_html__('Connected', 'pcc') . '</span></p>';
+            echo '<p>' . sprintf(esc_html__('API reachable. Sample events returned: %d', 'pcc'), (int)$count) . '</p>';
             }
         }
 

@@ -81,7 +81,12 @@ final class PCC_Plugin {
 
     private function init_hooks() {
         if (class_exists('PCC_Shortcodes')) {
-            add_action('init', array('PCC_Shortcodes', 'register'));
+            add_action('init', function () {
+                // pastikan service data siap
+                if (isset($this->data) && is_object($this->data)) {
+                    PCC_Shortcodes::register($this->data);
+                }
+            });
         }
 
         add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));

@@ -11,17 +11,38 @@ final class PCC_Data {
     /** @var PCC_API */
     private $api;
 
-    /** @var PCC_Cache */
+    /** @var PCC_Cache|null */
     private $cache;
 
-    public function __construct($api, $cache) {
+    public function __construct($api, $cache = null) {
         $this->api   = $api;
         $this->cache = $cache;
     }
 
     /**
-     * Backward-compatible method (existing code might call this).
+     * Safe cache get (optional cache layer)
+     */
+    private function cache_get($key) {
+        if ($this->cache && is_object($this->cache) && method_exists($this->cache, 'get')) {
+            return $this->cache->get($key);
+        }
+        return null;
+    }
+
+    /**
+     * Safe cache set (optional cache layer)
+     */
+    private function cache_set($key, $value, $ttl = 600) {
+        if ($this->cache && is_object($this->cache) && method_exists($this->cache, 'set')) {
+            $this->cache->set($key, $value, $ttl);
+        }
+    }
+
+    /**
+     * Backward-compatible method.
      * Returns upcoming event instances (default 50) within next 2 months.
+     *
+     * @return array|\WP_Error
      */
     public function get_events($limit = 50, $public_only = true) {
         $limit = max(1, (int)$limit);
@@ -31,6 +52,9 @@ final class PCC_Data {
         $end   = $start->modify('+2 months');
 
         $items = $this->get_event_instances_in_range($start, $end, $public_only);
+        if (is_wp_error($items)) {
+            return $items;
+        }
 
         if (count($items) > $limit) {
             $items = array_slice($items, 0, $limit);
@@ -39,8 +63,10 @@ final class PCC_Data {
     }
 
     /**
-     * Fetch event instances between two DateTimeImmutable boundaries (inclusive start, exclusive end).
+     * Fetch event instances between two DateTimeImmutable boundaries.
      * Uses /calendar/v2/event_instances with where[starts_at][gte] and where[starts_at][lt]
+     *
+     * @return array|\WP_Error
      */
     public function get_event_instances_in_range(DateTimeImmutable $start, DateTimeImmutable $end, $public_only = true) {
         $public_only = (bool)$public_only;
@@ -49,7 +75,7 @@ final class PCC_Data {
         $end_utc   = $end->setTimezone(new DateTimeZone('UTC'))->format('c');
 
         $cache_key = 'event_instances_range_' . md5($start_utc . '|' . $end_utc . '|public=' . ($public_only ? '1' : '0'));
-        $cached = $this->cache->get($cache_key);
+        $cached = $this->cache_get($cache_key);
         if (is_array($cached)) {
             return $cached;
         }
@@ -63,14 +89,22 @@ final class PCC_Data {
         );
 
         $resp = $this->api->get_all('calendar/v2/event_instances', $params);
+
+        // ✅ IMPORTANT: handle API errors to avoid fatal
+        if (is_wp_error($resp)) {
+            return $resp;
+        }
+
         $items = $this->normalize_event_instances_response($resp, $public_only);
 
-        $this->cache->set($cache_key, $items, 600);
+        $this->cache_set($cache_key, $items, 600);
         return $items;
     }
 
     /**
      * Fetch instances for specific month (year + month number 1..12), localized to WP timezone.
+     *
+     * @return array|\WP_Error
      */
     public function get_event_instances_for_month($year, $month, $public_only = true) {
         $year  = max(1970, (int)$year);
@@ -87,63 +121,73 @@ final class PCC_Data {
 
     /**
      * =====================================================
-     * NEW: GROUPS
+     * GROUPS
      * =====================================================
-     * Usage: $this->get_groups(50, true)
+     * @return array|\WP_Error
      */
     public function get_groups($limit = 50, $public_only = true) {
         $limit = max(1, min(200, (int)$limit));
         $public_only = (bool)$public_only;
 
         $cache_key = 'groups_' . md5('limit=' . $limit . '|public=' . ($public_only ? '1' : '0'));
-        $cached = $this->cache->get($cache_key);
+        $cached = $this->cache_get($cache_key);
         if (is_array($cached)) {
             return $cached;
         }
 
         $params = array(
             'per_page' => 100,
-            // optional ordering (if supported by API)
             'order'    => 'name',
         );
 
         $resp = $this->api->get_all('groups/v2/groups', $params);
+
+        // ✅ IMPORTANT: handle API errors to avoid fatal
+        if (is_wp_error($resp)) {
+            return $resp;
+        }
+
         $items = $this->normalize_groups_response($resp, $public_only);
 
         if (count($items) > $limit) {
             $items = array_slice($items, 0, $limit);
         }
 
-        $this->cache->set($cache_key, $items, 600);
+        $this->cache_set($cache_key, $items, 600);
         return $items;
     }
 
     /**
      * =====================================================
-     * NEW: SERMONS (Publishing Episodes)
+     * SERMONS (Publishing Episodes)
      * =====================================================
-     * Usage: $this->get_sermons(20, true)
+     * @return array|\WP_Error
      */
     public function get_sermons($limit = 20, $public_only = true) {
         $limit = max(1, min(200, (int)$limit));
         $public_only = (bool)$public_only;
 
         $cache_key = 'sermons_' . md5('limit=' . $limit . '|public=' . ($public_only ? '1' : '0'));
-        $cached = $this->cache->get($cache_key);
+        $cached = $this->cache_get($cache_key);
         if (is_array($cached)) {
             return $cached;
         }
 
         $params = array(
             'per_page' => 100,
-            // If API supports order, this helps (won't break if ignored)
             'order'    => '-published_at',
         );
 
         $resp = $this->api->get_all('publishing/v2/episodes', $params);
+
+        // ✅ IMPORTANT: handle API errors to avoid fatal
+        if (is_wp_error($resp)) {
+            return $resp;
+        }
+
         $items = $this->normalize_sermons_response($resp, $public_only);
 
-        // Sort by date desc (fallback if API doesn't order)
+        // Fallback sort (desc)
         usort($items, function($a, $b) {
             return strcmp((string)($b['published_at'] ?? ''), (string)($a['published_at'] ?? ''));
         });
@@ -152,7 +196,7 @@ final class PCC_Data {
             $items = array_slice($items, 0, $limit);
         }
 
-        $this->cache->set($cache_key, $items, 600);
+        $this->cache_set($cache_key, $items, 600);
         return $items;
     }
 
@@ -162,8 +206,12 @@ final class PCC_Data {
     private function normalize_event_instances_response($resp, $public_only) {
         $public_only = (bool)$public_only;
 
-        $data = isset($resp['data']) && is_array($resp['data']) ? $resp['data'] : array();
-        $included = isset($resp['included']) && is_array($resp['included']) ? $resp['included'] : array();
+        if (!is_array($resp)) {
+            return array();
+        }
+
+        $data = (isset($resp['data']) && is_array($resp['data'])) ? $resp['data'] : array();
+        $included = (isset($resp['included']) && is_array($resp['included'])) ? $resp['included'] : array();
 
         // Map included events by id.
         $events_by_id = array();
@@ -179,7 +227,7 @@ final class PCC_Data {
             if (!is_array($row)) { continue; }
 
             $inst_id = isset($row['id']) ? (string)$row['id'] : '';
-            $attrs   = isset($row['attributes']) && is_array($row['attributes']) ? $row['attributes'] : array();
+            $attrs   = (isset($row['attributes']) && is_array($row['attributes'])) ? $row['attributes'] : array();
 
             $starts_at = isset($attrs['starts_at']) ? (string)$attrs['starts_at'] : '';
             $ends_at   = isset($attrs['ends_at']) ? (string)$attrs['ends_at'] : '';
@@ -207,10 +255,8 @@ final class PCC_Data {
             $location    = $this->first_non_empty($event_attrs, array('location', 'event_location', 'address'), '');
 
             $image_url = $this->first_non_empty($event_attrs, array('image_url', 'logo_url'), '');
-
             $url = $this->first_non_empty($event_attrs, array('church_center_url', 'public_url', 'url', 'website_url'), '');
 
-            // Date key in WP timezone (for calendar grouping)
             $date_key = '';
             if ($starts_at) {
                 $ts = strtotime($starts_at);
@@ -236,20 +282,21 @@ final class PCC_Data {
         return $out;
     }
 
-    /**
-     * Normalize Groups response: /groups/v2/groups
-     */
     private function normalize_groups_response($resp, $public_only) {
         $public_only = (bool)$public_only;
 
-        $data = isset($resp['data']) && is_array($resp['data']) ? $resp['data'] : array();
+        if (!is_array($resp)) {
+            return array();
+        }
+
+        $data = (isset($resp['data']) && is_array($resp['data'])) ? $resp['data'] : array();
         $out = array();
 
         foreach ($data as $row) {
             if (!is_array($row)) { continue; }
 
             $id = isset($row['id']) ? (string)$row['id'] : '';
-            $attrs = isset($row['attributes']) && is_array($row['attributes']) ? $row['attributes'] : array();
+            $attrs = (isset($row['attributes']) && is_array($row['attributes'])) ? $row['attributes'] : array();
 
             if ($public_only && !$this->is_group_public($attrs)) {
                 continue;
@@ -272,7 +319,6 @@ final class PCC_Data {
                 'web_url',
             ), '');
 
-            // fallback: if the API provides a church_center_url only when listed, public_only can be enforced by url presence
             if ($public_only && $url === '' && $title !== '') {
                 continue;
             }
@@ -289,20 +335,21 @@ final class PCC_Data {
         return $out;
     }
 
-    /**
-     * Normalize Sermons response: /publishing/v2/episodes
-     */
     private function normalize_sermons_response($resp, $public_only) {
         $public_only = (bool)$public_only;
 
-        $data = isset($resp['data']) && is_array($resp['data']) ? $resp['data'] : array();
+        if (!is_array($resp)) {
+            return array();
+        }
+
+        $data = (isset($resp['data']) && is_array($resp['data'])) ? $resp['data'] : array();
         $out = array();
 
         foreach ($data as $row) {
             if (!is_array($row)) { continue; }
 
             $id = isset($row['id']) ? (string)$row['id'] : '';
-            $attrs = isset($row['attributes']) && is_array($row['attributes']) ? $row['attributes'] : array();
+            $attrs = (isset($row['attributes']) && is_array($row['attributes'])) ? $row['attributes'] : array();
 
             if ($public_only && !$this->is_episode_public($attrs)) {
                 continue;
@@ -323,7 +370,6 @@ final class PCC_Data {
                 'public_url','share_url','url','web_url','video_url','audio_url'
             ), '');
 
-            // If public_only, require something that looks shareable
             if ($public_only && $url === '' && $title !== '') {
                 continue;
             }
@@ -351,9 +397,6 @@ final class PCC_Data {
         return $default;
     }
 
-    /**
-     * Heuristic “Public times only / Published” filter for events
-     */
     private function is_event_public($event_attrs) {
         if (!is_array($event_attrs) || empty($event_attrs)) {
             return true;
@@ -386,28 +429,18 @@ final class PCC_Data {
             }
         }
 
-        $enum_keys = array(
-            'visibility',
-            'church_center_visibility',
-        );
+        $enum_keys = array('visibility','church_center_visibility');
         foreach ($enum_keys as $k) {
             if (isset($event_attrs[$k]) && is_string($event_attrs[$k])) {
                 $v = strtolower(trim($event_attrs[$k]));
-                if ($v === 'published' || $v === 'public' || $v === 'visible') {
-                    return true;
-                }
-                if ($v === 'hidden' || $v === 'unpublished' || $v === 'private') {
-                    return false;
-                }
+                if (in_array($v, array('published','public','visible'), true)) return true;
+                if (in_array($v, array('hidden','unpublished','private'), true)) return false;
             }
         }
 
         return true;
     }
 
-    /**
-     * Heuristic “public/listed” filter for groups
-     */
     private function is_group_public($attrs) {
         if (!is_array($attrs) || empty($attrs)) {
             return true;
@@ -428,7 +461,6 @@ final class PCC_Data {
             }
         }
 
-        // fallback: if it has a public Church Center URL, treat as public
         $url = $this->first_non_empty($attrs, array(
             'public_church_center_web_url','public_church_center_url','church_center_web_url','church_center_url'
         ), '');
@@ -439,9 +471,6 @@ final class PCC_Data {
         return true;
     }
 
-    /**
-     * Heuristic “published” filter for episodes
-     */
     private function is_episode_public($attrs) {
         if (!is_array($attrs) || empty($attrs)) {
             return true;
@@ -454,7 +483,6 @@ final class PCC_Data {
             }
         }
 
-        // If it has published_at/publish_at, consider it published
         $date = $this->first_non_empty($attrs, array('published_at','publish_at','released_at','release_date'), '');
         if ($date !== '') {
             return true;
